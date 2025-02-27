@@ -5,7 +5,7 @@ from sqlalchemy_serializer import SerializerMixin
 
 db = SQLAlchemy()
 
-class User(db.Model):
+class User(db.Model, SerializerMixin):
     __tablename__ = 'users'
 
     user_id = db.Column(db.Integer, primary_key=True)
@@ -15,6 +15,18 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp())
     updated_at = db.Column(db.TIMESTAMP, server_default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    
+    @validates('email')
+    def validate_email(self, key, email):
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            raise ValueError("Invalid email format")
+        return email 
+
+    @validates('name')
+    def validate_name(self, key, name):
+        if not name or len(name.strip()) == 0:
+            raise ValueError("Name cannot be empty")
+        return name      
 
     # Relationships
     graduates = db.relationship('Graduate', back_populates='user', uselist=False)
@@ -22,7 +34,7 @@ class User(db.Model):
     admin_accesses = db.relationship('AdminAccess', back_populates='user')
 
 
-class Graduate(db.Model):
+class Graduate(db.Model, SerializerMixin):
     __tablename__ = 'graduate'
 
     graduate_id = db.Column(db.Integer, primary_key=True)
@@ -35,7 +47,7 @@ class Graduate(db.Model):
     normal_accesses = db.relationship('NormalAccess', back_populates='graduate')
 
 
-class Admin(db.Model):
+class Admin(db.Model, SerializerMixin):
     __tablename__ = 'admin'
 
     admin_id = db.Column(db.Integer, primary_key=True)
@@ -46,7 +58,7 @@ class Admin(db.Model):
     admin_accesses = db.relationship('AdminAccess', back_populates='admin')
 
 
-class Job(db.Model):
+class Job(db.Model, SerializerMixin):
     __tablename__ = 'jobs'
 
     job_id = db.Column(db.Integer, primary_key=True)
@@ -57,6 +69,24 @@ class Job(db.Model):
     salary = db.Column(db.Numeric(10, 2), nullable=False)
     posted_date = db.Column(db.TIMESTAMP, nullable=False)
     expiration_date = db.Column(db.TIMESTAMP, nullable=False)
+    
+    @validates('salary')
+    def validate_salary(self, key, salary):
+        if salary < 0:
+            raise ValueError("Salary cannot be negative")
+        return salary
+
+    @validates('posted_date')
+    def validate_posted_date(self, key, posted_date):
+        if not posted_date:
+            raise ValueError("Posted date cannot be null")
+        return posted_date
+
+    @validates('expiration_date')
+    def validate_expiration_date(self, key, expiration_date):
+        if not expiration_date:
+            raise ValueError("Expiration date cannot be null")
+        return expiration_date
 
     # Relationships
     job_applications = db.relationship('JobApplication', back_populates='job')
@@ -65,7 +95,7 @@ class Job(db.Model):
     admin_accesses = db.relationship('AdminAccess', back_populates='job')
 
 
-class JobApplication(db.Model):
+class JobApplication(db.Model, SerializerMixin):
     __tablename__ = 'job_applications'
 
     application_id = db.Column(db.Integer, primary_key=True)
@@ -78,7 +108,7 @@ class JobApplication(db.Model):
     job = db.relationship('Job', back_populates='job_applications')
 
 
-class Payment(db.Model):
+class Payment(db.Model, SerializerMixin):
     __tablename__ = 'payments'
 
     payment_id = db.Column(db.Integer, primary_key=True)
@@ -86,6 +116,20 @@ class Payment(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     payment_date = db.Column(db.TIMESTAMP, nullable=False, server_default=db.func.current_timestamp())
     payment_method = db.Column(db.String(50), nullable=False)
+    
+    
+    @validates('amount')
+    def validate_amount(self, key, amount):
+        if amount < 0:
+            raise ValueError("Amount cannot be negative")
+        return amount
+
+    @validates('payment_method')
+    def validate_payment_method(self, key, payment_method):
+        if not payment_method or len(payment_method.strip()) == 0:
+            raise ValueError("Payment method cannot be empty")
+        return payment_method
+
 
     # Relationships
     graduate = db.relationship('Graduate', back_populates='payments')
@@ -93,7 +137,7 @@ class Payment(db.Model):
     admin_accesses = db.relationship('AdminAccess', back_populates='payment')
 
 
-class NormalAccess(db.Model):
+class NormalAccess(db.Model, SerializerMixin):
     __tablename__ = 'normal_access'
 
     normal_id = db.Column(db.Integer, primary_key=True)
@@ -105,7 +149,7 @@ class NormalAccess(db.Model):
     job = db.relationship('Job', back_populates='normal_accesses')
 
 
-class ExtraResource(db.Model):
+class ExtraResource(db.Model, SerializerMixin):
     __tablename__ = 'extra_resources'
 
     resource_id = db.Column(db.Integer, primary_key=True)
@@ -113,12 +157,32 @@ class ExtraResource(db.Model):
     description = db.Column(db.Text, nullable=False)
     content_url = db.Column(db.String(255), nullable=False)
 
+    @validates('title')
+    def validate_title(self, key, title):
+        if not title or len(title.strip()) == 0:
+            raise ValueError("Title cannot be empty")
+        return title
+    
+    @validates('content_url')
+    def validate_content_url(self, key, content_url):     
+        if not content_url or len(content_url.strip()) == 0:
+            raise ValueError("Content URL cannot be empty")
+        return content_url
+    
+    @validates('description')
+    def validate_description(self, key, description):
+        if not description or len(description.strip()) == 0:
+            raise ValueError("Description cannot be empty")
+        return description
+    
+
+
     # Relationships
     premium_accesses = db.relationship('PremiumAccess', back_populates='resource')
     admin_accesses = db.relationship('AdminAccess', back_populates='resource')
 
 
-class PremiumAccess(db.Model):
+class PremiumAccess(db.Model, SerializerMixin):
     __tablename__ = 'premium_access'
 
     premium_id = db.Column(db.Integer, primary_key=True)
@@ -132,7 +196,7 @@ class PremiumAccess(db.Model):
     resource = db.relationship('ExtraResource', back_populates='premium_accesses')
 
 
-class AdminAccess(db.Model):
+class AdminAccess(db.Model, SerializerMixin):
     __tablename__ = 'admin_access'
 
     access_id = db.Column(db.Integer, primary_key=True)
