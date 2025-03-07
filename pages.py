@@ -12,7 +12,7 @@
 #/delete users
 
 {
-#Normal graduates
+#Users
 #They can apply pay for premium and ssearch for jobs 
 #/add_application
 #/add payment
@@ -50,7 +50,7 @@
 
 
   ],
-#premium graduates and admin:
+#premium users and admin:
 #They can search for jobs
 #premium graduate:
 #/add_application
@@ -122,6 +122,7 @@
     "date_joined": "2025-03-05T00:00:00",
 
   },
+
   {
     "username": "jane_smith",
     "email": "jane.smith@example.com",
@@ -199,7 +200,7 @@
 
 
 roles = {
-    'normal': {
+    'users': {
         'can_update_account': True,
         'can_delete_account': True,
         'can_view_jobs': True,
@@ -211,7 +212,7 @@ roles = {
         'can_view_applications': False,
         'can_view_payments': False
     },
-    'premium': {
+    'premium_users': {
         'can_update_account': True,
         'can_delete_account': True,
         'can_view_jobs': True,
