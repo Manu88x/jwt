@@ -200,39 +200,47 @@
 
 
 roles = {
-    'users': {
-        'can_update_account': True,
-        'can_delete_account': True,
-        'can_view_jobs': True,
+    
+
+    'graduate': {
+        "can fetch users info":True,#individual information
+        "can_add_user":True, #this is basically signing up
+        'can_update_user': True, #limited to their own information
+        'can_delete_user': True,  #limited to their own information
+        'can_view_jobs': True,   #this will only be found in normal since 
         'can_apply_for_jobs': True,
         'can_pay_for_premium': True,
         'can_view_job_resources': False,
-        'can_manage_users': False,
-        'can_manage_jobs': False,
+        "can_add_job_resources":False,
+        'can_update_job_resources': False,
+        'can_delete_job_resources': False,
         'can_view_applications': False,
         'can_view_payments': False
     },
-    'premium_users': {
-        'can_update_account': True,
-        'can_delete_account': True,
-        'can_view_jobs': True,
+    'premium_graduate': {
+        "can fetch users info":True,#individual information
+        "can_add_user":True, #this is basically them signing up
+        'can_update_user': True, #limited to their own information
+        'can_delete_user': True, #limited to their own information
         'can_apply_for_jobs': True,
-        'can_pay_for_premium': True,
-        'can_view_job_resources': True,
-        'can_manage_users': False,
-        'can_manage_jobs': False,
+        'can_view_job_resources': True, #here the premium graduate can freely veiw both jobs and resources 
+        "can_add_job_resources":False,
+        'can_update_job_resources': False,
+        'can_delete_job_resources': False,
         'can_view_applications': False,
         'can_view_payments': False
     },
     'admin': {
-        'can_update_account': True,
-        'can_delete_account': True,
-        'can_view_jobs': True,
+        "can fetch users info":True,#individual information
+        "can_view_users":True,#can veiw all users
+        "can_add_user":True, #this us basically signing up
+        'can_update_user': True, #any user
+        'can_delete_user': True,  #any user
         'can_apply_for_jobs': True,
-        'can_pay_for_premium': True,
-        'can_view_job_resources': True,
-        'can_manage_users': True,
-        'can_manage_jobs': True,
+        'can_view_job_resources': True, #here the admin can freely veiw both jobs and resources,
+        "can_add_job_resources":True, 
+        'can_update_job_resources': True,
+        'can_delete_job_resources': True,
         'can_view_applications': True,
         'can_view_payments': True
     }
