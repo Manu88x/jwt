@@ -7,6 +7,8 @@ import datetime
 from flask import Response
 import bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from auth_routes import Register, Login, Protected
+from datetime import datetime 
 
 app = Flask(__name__)
 cors = CORS(app, origins="*")
@@ -31,7 +33,7 @@ class BaseRoute(Resource):
                 "/get_job": "Retrieve a job by ID or job name (e.g., /get_job?job_id=1 or /get_job?job_name=Software Developer).",
                 "/get_users": "Retrieve all users.",
                 "/get_user": "Retrieve a user by ID, username, or role (e.g., /get_user?user_id=1, /get_user?username=john_doe, or /get_user?role=admin).",
-                "/add_user": "Add a new user.",
+                "/add_user": "Add a new user.", #removed
                 "/update_user/<int:user_id>": "Update a user by ID.",
                 "/delete_user/<int:user_id>": "Delete a user by ID.",
                 "/get_payments": "Retrieve all payments.",
@@ -90,15 +92,18 @@ class GetJob(Resource):
             job = Job.query.get(job_id)
             if not job:
                 # Return error as plain text
-                return Response(f"Job with ID {job_id} not found.", status=404, mimetype='text/plain')
+                return jsonify({"error": f"Job with ID {job_id} not found."}), 404
+                #return Response(f"Job with ID {job_id} not found.", status=404, mimetype='text/plain')
         elif job_name:
             job = Job.query.filter_by(title=job_name).first()
             if not job:
                 # Return error as plain text
-                return Response(f"Job with name '{job_name}' not found.", status=404, mimetype='text/plain')
+                return jsonify({"error": f"Job with name '{job_name}' not found."}), 404
+                #return Response(f"Job with name '{job_name}' not found.", status=404, mimetype='text/plain')
         else:
             # Return error as plain text
-            return Response("Either 'job_id' or 'job_name' must be provided.", status=400, mimetype='text/plain')
+            return jsonify({"error": "Either 'job_id' or 'job_name' must be provided."}), 400
+            #return Response("Either 'job_id' or 'job_name' must be provided.", status=400, mimetype='text/plain')
 
         # If the job is found, remove unwanted fields and return job data as JSON
         job_data = job.to_dict()  # Get the full job dict
@@ -118,7 +123,7 @@ class GetUsers(Resource):
             user_data.pop('applications', None)
             user_data.pop('payments', None)
             users_list.append(user_data)
-        return jsonify(users_list)
+        return users_list
 
 class GetUser(Resource):
     def get(self):
@@ -130,68 +135,30 @@ class GetUser(Resource):
             user = User.query.get(user_id)
             if not user:
                 # Return error as plain text
-                return Response(f"User with ID {user_id} not found.", status=404, mimetype='text/plain')
+                return {"error": f"User with ID {user_id} not found."}, 404
+                #return Response(f"User with ID {user_id} not found.", status=404, mimetype='text/plain')
         elif username:
             user = User.query.filter_by(username=username).first()
             if not user:
                 # Return error as plain text
-                return Response(f"User with username '{username}' not found.", status=404, mimetype='text/plain')
+                return {"error": f"User with username '{username}' not found."}, 404
+                #return Response(f"User with username '{username}' not found.", status=404, mimetype='text/plain')
         elif role:
             user = User.query.filter_by(role=role).first()
             if not user:
                 # Return error as plain text
-                return Response(f"No users found with role '{role}'.", status=404, mimetype='text/plain')
+                return {"error": f"No users found with role '{role}'."}, 404
+                #return Response(f"No users found with role '{role}'.", status=404, mimetype='text/plain')
         else:
             # Return error as plain text
-            return Response("Either 'user_id', 'username', or 'role' must be provided.", status=400, mimetype='text/plain')
+            return {"error": "Either 'user_id', 'username', or 'role' must be provided."}, 400
+            #return Response("Either 'user_id', 'username', or 'role' must be provided.", status=400, mimetype='text/plain')
 
         # If the user is found, remove unwanted fields and return user data as JSON
         user_data = user.to_dict()
         user_data.pop('applications', None)
         user_data.pop('payments', None)
-        return jsonify(user_data)  # Return the filtered user data as JSON
-
-    
-class AddUser(Resource):
-    def post(self):
-        data = request.get_json()
-
-        try:
-            # Ensure username, email, and password are provided
-            if not data.get('username') or not data.get('email') or not data.get('password'):
-                return jsonify({"error": "Username, email, and password are required."}), 400
-
-            # Set the role to 'user' by default
-            role = 'user'
-
-            # Hash the password before storing it
-            password_hash = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt())
-
-            # Create the user object
-            user = User(
-                username=data['username'],
-                email=data['email'],
-                phone=data.get('phone'),  # Optional
-                password_hash=password_hash,
-                role=role  # Set the role to 'user' by default
-            )
-
-            # Add the user to the database
-            db.session.add(user)
-            db.session.commit()
-
-            # Respond with the created user (excluding password hash)
-            return jsonify({
-                'message': 'User created successfully!',
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'phone': user.phone,
-                'role': user.role
-            }), 201
-
-        except Exception as e:
-            return jsonify({"error": f"An error occurred: {str(e)}"}), 400
+        return user_data # Return the filtered user data as JSON
 
 
 class UpdateUser(Resource):
@@ -224,7 +191,7 @@ class UpdateUser(Resource):
             db.session.commit()
             return jsonify(user.to_dict())
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
+            return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
     def delete(self, user_id):
@@ -233,6 +200,7 @@ class DeleteUser(Resource):
         # Keep job applications and payments but retain user data in them
         applications = JobApplication.query.filter_by(user_id=user.id).all()
         for app in applications:
+            app.user_id = None  # Disconnect the user from the job application
             app.username = user.username
             app.email = user.email
             app.phone = user.phone
@@ -240,6 +208,7 @@ class DeleteUser(Resource):
 
         payments = Payment.query.filter_by(user_id=user.id).all()
         for payment in payments:
+            payment.user_id = None  # Disconnect the user from the payment
             payment.username = user.username
             payment.email = user.email
             payment.phone = user.phone
@@ -249,8 +218,8 @@ class DeleteUser(Resource):
         db.session.delete(user)
         db.session.commit()
 
-        return jsonify({"message": "User deleted but related applications and payments retained."})
-
+        return {"message": "User deleted but related applications and payments retained."}
+    
 # Payment Routes
 class GetPayments(Resource):
     def get(self):
@@ -269,7 +238,7 @@ class GetPayment(Resource):
                 return jsonify(payment.to_dict())
             else:
                 # Return error as plain text
-                return Response("Payment not found with the provided ID.", status=404, mimetype='text/plain')
+                return jsonify({"error": "Payment not found with the provided ID."}), 404
 
         # Check for username
         elif username:
@@ -280,15 +249,18 @@ class GetPayment(Resource):
                     return jsonify([payment.to_dict() for payment in payments])
                 else:
                     # Return error as plain text
-                    return Response("No payments found for the provided username.", status=404, mimetype='text/plain')
+                    return jsonify({"error": "No payments found for the provided username."}), 404
+                    #return Response("No payments found for the provided username.", status=404, mimetype='text/plain')
             else:
                 # Return error as plain text
-                return Response("User with the provided username does not exist.", status=404, mimetype='text/plain')
+                return jsonify({"error": "User with the provided username does not exist."}), 404
+                #return Response("User with the provided username does not exist.", status=404, mimetype='text/plain')
 
         # If neither payment_id nor username is provided
         else:
             # Return error as plain text
-            return Response("Either 'payment_id' or 'username' must be provided.", status=400, mimetype='text/plain')
+            return jsonify({"error": "Payment not found with the provided ID."}), 400
+            #return Response("Either 'payment_id' or 'username' must be provided.", status=400, mimetype='text/plain')
 
 
 class AddPayment(Resource):
@@ -309,9 +281,9 @@ class AddPayment(Resource):
                 user.role = 'premium'
                 db.session.commit()
 
-            return jsonify(payment.to_dict()), 201
+            return payment.to_dict(), 201
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
+            return {"error": str(e)}, 400
 
 # Extra Resource Routes
 class GetResources(Resource):
@@ -333,7 +305,8 @@ class GetResource(Resource):
                 return jsonify(resource.to_dict())  # No iteration needed for a single object
             else:
                 # Return error as plain text
-                return Response("Resource not found with the provided ID.", status=404, mimetype='text/plain')
+                return jsonify({"error": "Resource not found with the provided ID."}), 404
+                #return Response("Resource not found with the provided ID.", status=404, mimetype='text/plain')
 
         # Handle job_name
         elif job_name:
@@ -344,7 +317,8 @@ class GetResource(Resource):
                     return jsonify([resource.to_dict() for resource in resources])
                 else:
                     # Return error as plain text
-                    return Response("No resources found for this job.", status=404, mimetype='text/plain')
+                    return jsonify({"error": "No resources found for this job."}), 404
+                    #return Response("No resources found for this job.", status=404, mimetype='text/plain')
 
         # Handle resource_type
         elif resource_type:
@@ -353,40 +327,57 @@ class GetResource(Resource):
                 return jsonify([resource.to_dict() for resource in resources])
             else:
                 # Return error as plain text
-                return Response("No resources found for this type.", status=404, mimetype='text/plain')
+                return jsonify({"error": "No resources found for this type."}), 404
+                #return Response("No resources found for this type.", status=404, mimetype='text/plain')
 
         # If neither resource_id, job_name, nor resource_type is provided
         else:
             # Return error as plain text
-            return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
-
+            return jsonify({"error": "Provide either 'resource_id', 'job_name', or 'resource_type'."}), 400
+            #return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
 
 class AddResource(Resource):
     def post(self):
         data = request.get_json()
 
+        # Validate required fields
         if not data.get('job_id') or not data.get('resource_name') or not data.get('resource_type'):
-            return jsonify({"error": "job_id, resource_name, and resource_type are required fields."}), 400
+            return {"error": "job_id, resource_name, and resource_type are required fields."}, 400
 
         try:
+            # Fetch the job or create a new one
             job = Job.query.get(data['job_id'])
             if not job:
+                # Validate application_deadline
+                if 'application_deadline' not in data:
+                    return {"error": "application_deadline is a required field."}, 400
+                
+                # Validate the date format
+                try:
+                    application_deadline = datetime.strptime(data['application_deadline'], "%Y-%m-%d")
+                except ValueError:
+                    return {"error": "Invalid date format for application_deadline. Expected format: YYYY-MM-DD."}, 400
+
+                # Create a new job with default values for optional fields
                 job = Job(
-                    title=data['job_title'],
-                    location=data['job_location'],
-                    salary_min=data['salary_min'],
-                    salary_max=data['salary_max'],
-                    job_type=data['job_type'],
-                    skills_required=data['skills_required'],
-                    benefits=data['benefits'],
-                    application_deadline=data['application_deadline'],
-                    employer=data['employer'],
-                    employer_email=data['employer_email'],
-                    employer_phone=data['employer_phone']
+                    title=data.get('job_title', 'Default Title'),
+                    description=data.get('job_description', ''),
+                    location=data.get('job_location', 'Remote'),
+                    salary_min=data.get('salary_min', 0),
+                    salary_max=data.get('salary_max', 0),
+                    job_type=data.get('job_type', 'Full-time'),
+                    skills_required=data.get('skills_required', ''),
+                    benefits=data.get('benefits', ''),
+                    application_deadline=application_deadline,
+                    employer=data.get('employer', ''),
+                    employer_email=data.get('employer_email', ''),
+                    employer_phone=data.get('employer_phone', '')
                 )
                 db.session.add(job)
                 db.session.commit()
+                print(f"Created new job with ID: {job.id}")
 
+            # Create the resource
             resource = ExtraResource(
                 job_id=job.id,
                 resource_name=data['resource_name'],
@@ -395,56 +386,75 @@ class AddResource(Resource):
             )
             db.session.add(resource)
             db.session.commit()
+            print(f"Created new resource with ID: {resource.id}")
 
-            return jsonify(resource.to_dict()), 201
+            return resource.to_dict(), 201
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
-
+            # Log the error and rollback the session
+            db.session.rollback()
+            print(f"Error: {str(e)}")  # This will help with debugging
+            return {"error": str(e)}, 400
+        
 class UpdateResource(Resource):
-    def put(self, resource_id):
+    def patch(self, resource_id):
+        # Fetch the ExtraResource by resource_id
         resource = ExtraResource.query.get_or_404(resource_id)
         data = request.get_json()
 
         try:
-            resource.job_id = data.get('job_id', resource.job_id)
-            resource.resource_name = data.get('resource_name', resource.resource_name)
-            resource.description = data.get('description', resource.description)
-            resource.resource_type = data.get('resource_type', resource.resource_type)
+            # Partial update: Update only the fields that are provided in the request
+            if 'resource_name' in data:
+                resource.resource_name = data['resource_name']
+            if 'description' in data:
+                resource.description = data['description']
+            if 'resource_type' in data:
+                resource.resource_type = data['resource_type']
 
+            # If job_id is provided, update the associated job details
             if 'job_id' in data:
                 job = Job.query.get(data['job_id'])
-                if job:
-                    job.title = data.get('job_title', job.title)
-                    job.location = data.get('job_location', job.location)
-                    job.salary_min = data.get('salary_min', job.salary_min)
-                    job.salary_max = data.get('salary_max', job.salary_max)
-                    job.job_type = data.get('job_type', job.job_type)
-                    job.skills_required = data.get('skills_required', job.skills_required)
-                    job.benefits = data.get('benefits', job.benefits)
-                    job.application_deadline = data.get('application_deadline', job.application_deadline)
-                    job.employer = data.get('employer', job.employer)
-                    job.employer_email = data.get('employer_email', job.employer_email)
-                    job.employer_phone = data.get('employer_phone', job.employer_phone)
+                if not job:
+                    return {"error": "Job not found"}, 404  # Return error if job doesn't exist
 
-                    db.session.commit()
+                # Update job details if provided in the request
+                if 'job_title' in data:
+                    job.title = data['job_title']
+                if 'job_location' in data:
+                    job.location = data['job_location']
+                if 'salary_min' in data:
+                    job.salary_min = data['salary_min']
+                if 'salary_max' in data:
+                    job.salary_max = data['salary_max']
+                if 'job_type' in data:
+                    job.job_type = data['job_type']
+                if 'skills_required' in data:
+                    job.skills_required = data['skills_required']
+                if 'benefits' in data:
+                    job.benefits = data['benefits']
+                if 'application_deadline' in data:
+                    try:
+                        # Ensure the application_deadline is correctly formatted as datetime
+                        application_deadline = datetime.strptime(data['application_deadline'], "%Y-%m-%d")
+                        job.application_deadline = application_deadline
+                    except ValueError:
+                        return {"error": "Invalid date format for application_deadline. Expected format: YYYY-MM-DD."}, 400
+                if 'employer' in data:
+                    job.employer = data['employer']
+                if 'employer_email' in data:
+                    job.employer_email = data['employer_email']
+                if 'employer_phone' in data:
+                    job.employer_phone = data['employer_phone']
 
-                    applications = JobApplication.query.filter_by(job_id=job.id).all()
-                    for app in applications:
-                        app.job.title = job.title
-                        app.job.location = job.location
-                        app.job.salary_min = job.salary_min
-                        app.job.salary_max = job.salary_max
-                        app.job.job_type = job.job_type
-                        app.job.skills_required = job.skills_required
-                        app.job.benefits = job.benefits
-                        app.job.application_deadline = job.application_deadline
-                        db.session.commit()
+                db.session.commit()  # Commit changes to the job
 
-            db.session.commit()
-            return jsonify(resource.to_dict())
+            db.session.commit()  # Commit changes to the resource
+            return resource.to_dict()  # Return updated resource as a dictionary
+
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
-
+            db.session.rollback()  # Rollback if an error occurs
+            print(f"Error updating resource: {str(e)}")  # For debugging purposes
+            return {"error": str(e)}, 400
+                
 class DeleteResource(Resource):
     def delete(self, resource_id):
         resource = ExtraResource.query.get_or_404(resource_id)
@@ -474,7 +484,7 @@ class DeleteResource(Resource):
         db.session.delete(resource)
         db.session.commit()
 
-        return jsonify({"message": "Resource deleted, but job information retained in applications."})        
+        return {"message": "Resource deleted, but job information retained in applications."}        
 
 # Job Application Routes
 class GetApplications(Resource):
@@ -496,7 +506,8 @@ class GetApplication(Resource):
                 if application:
                     return jsonify(application.to_dict())  # Return application as JSON
                 else:
-                    return Response(f"Application not found with ID {application_id}.", status=404, mimetype='text/plain')
+                    return jsonify({"error": f"Application not found with ID {application_id}."}), 404
+                    #return Response(f"Application not found with ID {application_id}.", status=404, mimetype='text/plain')
 
             # Handle username search
             elif username:
@@ -506,9 +517,11 @@ class GetApplication(Resource):
                     if applications:
                         return jsonify([application.to_dict() for application in applications])
                     else:
-                        return Response(f"No applications found for user '{username}'.", status=404, mimetype='text/plain')
+                        return jsonify({"error": f"No applications found for user '{username}'."}), 404
+                        #return Response(f"No applications found for user '{username}'.", status=404, mimetype='text/plain')
                 else:
-                    return Response(f"User with username '{username}' does not exist.", status=404, mimetype='text/plain')
+                    return jsonify({"error": f"User with username '{username}' does not exist."}), 404
+                    #return Response(f"User with username '{username}' does not exist.", status=404, mimetype='text/plain')
 
             # Handle job_name search
             elif job_name:
@@ -518,15 +531,18 @@ class GetApplication(Resource):
                     if applications:
                         return jsonify([application.to_dict() for application in applications])
                     else:
-                        return Response(f"No applications found for job '{job_name}'.", status=404, mimetype='text/plain')
+                        return jsonify({"error": f"No applications found for job '{job_name}'."}), 404
+                        #return Response(f"No applications found for job '{job_name}'.", status=404, mimetype='text/plain')
 
             # If none of the parameters are provided
             else:
-                return Response("Please provide either 'application_id', 'username', or 'job_name'.", status=400, mimetype='text/plain')
+                return jsonify({"error": "Please provide either 'application_id', 'username', or 'job_name'."}), 400
+                #return Response("Please provide either 'application_id', 'username', or 'job_name'.", status=400, mimetype='text/plain')
 
         except Exception as e:
             # Return a plain text error message
-            return Response(f"An error occurred: {str(e)}", status=500, mimetype='text/plain')
+            return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+            #return Response(f"An error occurred: {str(e)}", status=500, mimetype='text/plain')
 
 
 
@@ -547,9 +563,14 @@ class AddApplication(Resource):
             db.session.add(application)
             db.session.commit()
 
-            return jsonify(application.to_dict()), 201
+            return application.to_dict(), 201
         except Exception as e:
             return jsonify({"error": str(e)}), 400
+
+#authentication routes
+api.add_resource(Register, '/register')
+api.add_resource(Login, '/login')
+api.add_resource(Protected, '/protected')
 
 # Add resources to API with specific HTTP methods and unique routes
 api.add_resource(BaseRoute, '/')
@@ -559,7 +580,6 @@ api.add_resource(GetJobs, '/get_jobs')
 api.add_resource(GetJob, '/get_job')  # Changed this route to handle both job ID and job name
 api.add_resource(GetUsers, '/get_users')
 api.add_resource(GetUser, '/get_user')  # Changed this route to handle both user ID and username
-api.add_resource(AddUser, '/add_user')
 api.add_resource(UpdateUser, '/update_user/<int:user_id>')
 api.add_resource(DeleteUser, '/delete_user/<int:user_id>')
 

@@ -22,6 +22,9 @@ class User(db.Model, SerializerMixin):
 
     payments = db.relationship('Payment', back_populates='user', lazy=True)
     applications = db.relationship('JobApplication', back_populates='user', lazy=True)
+    
+    # Serialization rules
+    serialize_rules = ('-password_hash', '-payments.user', '-applications.user')
 
     @validates('email')
     def validate_email(self, key, email):
@@ -69,6 +72,9 @@ class Job(db.Model, SerializerMixin):
 
     applications = db.relationship('JobApplication', back_populates='job', lazy=True)
     extra_resources = db.relationship('ExtraResource', back_populates='job', lazy=True)
+    
+    # Serialization rules
+    serialize_rules = ('-applications.job', '-extra_resources.job', '-employer_email', '-employer_phone')
 
     @validates('salary_min', 'salary_max')
     def validate_salary(self, key, salary):
@@ -115,13 +121,16 @@ class JobApplication(db.Model, SerializerMixin):
     __tablename__ = 'job_applications'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     job_id = db.Column(db.Integer, db.ForeignKey('jobs.id'), nullable=False)
     application_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default="pending")
 
     user = db.relationship('User', back_populates='applications', lazy=True)
     job = db.relationship('Job', back_populates='applications', lazy=True)
+    
+     # Serialization rules
+    serialize_rules = ('-user.applications', '-job.applications', '-user.password_hash')
 
     @validates('status')
     def validate_status(self, key, status):
@@ -133,6 +142,11 @@ class JobApplication(db.Model, SerializerMixin):
         app_dict = {
             "application_date": self.application_date.isoformat() if self.application_date else None,
             "status": self.status,
+            #"username": self.user.username,
+            #"email": self.user.email,
+            #"phone": self.user.phone,
+            #"role": self.user.role,
+            #"date_joined": self.user.date_joined.isoformat() if self.user.date_joined else None,
             "user": {
                 "username": self.user.username,
                 "email": self.user.email,
@@ -140,6 +154,20 @@ class JobApplication(db.Model, SerializerMixin):
                 "role": self.user.role,
                 "date_joined": self.user.date_joined.isoformat() if self.user.date_joined else None
             },
+            #"title": self.job.title,
+            #"description": self.job.description,
+            #"location": self.job.location,
+            #"salary_min": self.job.salary_min,
+            #"salary_max": self.job.salary_max,
+            #"job_type": self.job.job_type,
+            #"skills_required": self.job.skills_required,
+            #"benefits": self.job.benefits,
+            #"application_deadline": self.job.application_deadline.isoformat() if self.job.application_deadline else None,
+            #"employer": self.job.employer,
+            #"employer_email": self.job.employer_email,
+            #"employer_phone": self.job.employer_phone,
+            #"date_posted": self.job.date_posted.isoformat() if self.job.date_posted else None,
+            #"is_active": self.job.is_active,
             "job": {
                 "title": self.job.title,
                 "description": self.job.description,
@@ -170,6 +198,9 @@ class Payment(db.Model, SerializerMixin):
     payment_status = db.Column(db.String(50), default="completed")
 
     user = db.relationship('User', back_populates='payments', lazy=True)
+    
+     # Serialization rules
+    serialize_rules = ('-user.payments', '-user.password_hash')
 
     @validates('amount')
     def validate_amount(self, key, amount):
@@ -183,6 +214,11 @@ class Payment(db.Model, SerializerMixin):
             "amount": self.amount,
             "payment_date": self.payment_date.isoformat() if self.payment_date else None,
             "payment_status": self.payment_status,
+            #"username": self.user.username,
+            #"email": self.user.email,
+            #"phone": self.user.phone,
+            #"role": self.user.role,
+            #"date_joined": self.user.date_joined.isoformat() if self.user.date_joined else None
             "user": {
                 "username": self.user.username,
                 "email": self.user.email,
@@ -204,6 +240,9 @@ class ExtraResource(db.Model, SerializerMixin):
     resource_type = db.Column(db.String(50), nullable=False)
 
     job = db.relationship('Job', back_populates='extra_resources')
+    
+     # Serialization rules
+    serialize_rules = ('-job.extra_resources', '-job.applications', '-job.employer_email', '-job.employer_phone')
 
     def to_dict(self):
         resource_dict = {
