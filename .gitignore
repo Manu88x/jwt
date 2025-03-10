@@ -2,7 +2,7 @@
 # Python-related files
 *.pyc
 *.pyo
-*.pyd
+*.pydc
 __pycache__/
 *.env
 .env.*
