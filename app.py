@@ -80,7 +80,6 @@ class BaseRoute(Resource):
 
 # Job Routes
 class GetJobs(Resource):
-    @role_required('admin')
     @jwt_required()
     def get(self):
         jobs = Job.query.all()  # Retrieve all jobs
@@ -97,6 +96,7 @@ class GetJobs(Resource):
 api.add_resource(GetJobs, '/get_jobs')
 
 class GetJob(Resource):
+    @jwt_required()
     def get(self):
         job_id = request.args.get('job_id', type=int)
         job_name = request.args.get('job_name', type=str)
@@ -128,6 +128,8 @@ class GetJob(Resource):
 
 # User Routes
 class GetUsers(Resource):
+    @role_required('admin') # Only admin users can access this route
+    @jwt_required()
     def get(self):
         users = User.query.all()
         users_list = []
@@ -139,6 +141,8 @@ class GetUsers(Resource):
         return users_list
 
 class GetUser(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         user_id = request.args.get('user_id', type=int)
         username = request.args.get('username', type=str)
@@ -175,6 +179,8 @@ class GetUser(Resource):
 
 
 class UpdateUser(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def patch(self, user_id):
         user = User.query.get_or_404(user_id)
         data = request.get_json()
@@ -229,6 +235,8 @@ class UpdateUser(Resource):
             return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def delete(self, user_id):
         user = User.query.get_or_404(user_id)
 
@@ -257,11 +265,15 @@ class DeleteUser(Resource):
     
 # Payment Routes
 class GetPayments(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         payments = Payment.query.all()
         return jsonify([payment.to_dict() for payment in payments])
 
 class GetPayment(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         payment_id = request.args.get('payment_id', type=int)
         username = request.args.get('username', type=str)
@@ -299,6 +311,8 @@ class GetPayment(Resource):
 
 
 class AddPayment(Resource):
+    @role_required('user')  # Only regular users can access this route
+    @jwt_required()
     def post(self):
         data = request.get_json()
         try:
@@ -325,12 +339,16 @@ class AddPayment(Resource):
                     
 # Extra Resource Routes
 class GetResources(Resource):
+    @role_required('premium_user')  # Only admin & premium users can access this route
+    @jwt_required()
     def get(self):
         resources = ExtraResource.query.all()
         return jsonify([resource.to_dict() for resource in resources])
 
 
 class GetResource(Resource):
+    @role_required('premium_user')  # Only admin & premium users can access this route
+    @jwt_required()
     def get(self):
         resource_id = request.args.get('resource_id', type=int)
         job_name = request.args.get('job_name', type=str)
@@ -375,6 +393,8 @@ class GetResource(Resource):
             #return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
 
 class AddResource(Resource):
+    @role_required('admin')  # Only admin can access this route
+    @jwt_required()
     def post(self):
         data = request.get_json()
 
@@ -434,6 +454,8 @@ class AddResource(Resource):
             return {"error": str(e)}, 400
         
 class UpdateResource(Resource):
+    @role_required('admin')  # Only admin can access this route
+    @jwt_required()
     def patch(self, resource_id):
         # Fetch the ExtraResource by resource_id
         resource = ExtraResource.query.get_or_404(resource_id)
@@ -494,6 +516,8 @@ class UpdateResource(Resource):
             return {"error": str(e)}, 400
                 
 class DeleteResource(Resource):
+    @role_required('admin')  # Only admin can access this route
+    @jwt_required()
     def delete(self, resource_id):
         resource = ExtraResource.query.get_or_404(resource_id)
         job = Job.query.get_or_404(resource.job_id)
@@ -526,12 +550,16 @@ class DeleteResource(Resource):
 
 # Job Application Routes
 class GetApplications(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         applications = JobApplication.query.all()
         return jsonify([application.to_dict() for application in applications])
 
 
 class GetApplication(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         try:
             application_id = request.args.get('application_id', type=int)
@@ -585,6 +613,7 @@ class GetApplication(Resource):
 
 
 class AddApplication(Resource):
+    @jwt_required()
     def post(self):
         data = request.get_json()
 
