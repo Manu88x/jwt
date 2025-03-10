@@ -1,27 +1,35 @@
+######################
+###############
+##############
+########
+
 from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_cors import CORS
 from models import db, User, Job, JobApplication, Payment, ExtraResource
+from flask_jwt_extended import JWTManager
 import datetime
-from flask import Response
-import bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+import os
+from flask import Flask
+from flask_cors import CORS
 from auth_routes import Register, Login, Protected
-from datetime import datetime 
 
 app = Flask(__name__)
 cors = CORS(app, origins="*")
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///Job.db'
+
+# Load configurations from environment variables
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI')  # Provide default
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'your_secret_key'  # Change to a secure key
-app.config['JWT_SECRET_KEY'] = 'jwt_secret_key'  # Secret key for JWT
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')  # Fetch from environment
+
 
 db.init_app(app)
 migrate = Migrate(app, db)
 api = Api(app)
 
 jwt = JWTManager(app)  # Initialize JWT Manager
+
 
 # Base route to show available routes and info
 class BaseRoute(Resource):
@@ -80,7 +88,7 @@ class GetJobs(Resource):
             job_data.pop('applications', None)  # Remove applications field if present
             job_data.pop('extra_resources', None)  # Remove extra_resources field if present
             jobs_list.append(job_data)
-        return jsonify(jobs_list)  # Return the filtered list of jobs
+        return jobs_list  # Return the filtered list of jobs
 
 
 class GetJob(Resource):
@@ -98,18 +106,18 @@ class GetJob(Resource):
             job = Job.query.filter_by(title=job_name).first()
             if not job:
                 # Return error as plain text
-                return jsonify({"error": f"Job with name '{job_name}' not found."}), 404
+                return {"error": f"Job with name '{job_name}' not found."}, 404
                 #return Response(f"Job with name '{job_name}' not found.", status=404, mimetype='text/plain')
         else:
             # Return error as plain text
-            return jsonify({"error": "Either 'job_id' or 'job_name' must be provided."}), 400
+            return {"error": "Either 'job_id' or 'job_name' must be provided."}, 400
             #return Response("Either 'job_id' or 'job_name' must be provided.", status=400, mimetype='text/plain')
 
         # If the job is found, remove unwanted fields and return job data as JSON
         job_data = job.to_dict()  # Get the full job dict
         job_data.pop('applications', None)  # Remove applications field
         job_data.pop('extra_resources', None)  # Remove extra_resources field
-        return jsonify(job_data)  # Return the filtered job dat
+        return job_data  # Return the filtered job dat
 
     
 
