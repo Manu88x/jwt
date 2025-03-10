@@ -8,21 +8,25 @@ from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_cors import CORS
 from models import db, User, Job, JobApplication, Payment, ExtraResource
-from flask_jwt_extended import JWTManager
 import datetime
-import os
-from flask import Flask
-from flask_cors import CORS
-from auth_routes import Register, Login, Protected
+from flask import Response
+import bcrypt
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from auth_routes import Register, Login, Protected, role_required
+from datetime import datetime 
+from datetime import timedelta
+from flask import request, jsonify
+from werkzeug.security import generate_password_hash
+
 
 app = Flask(__name__)
 cors = CORS(app, origins="*")
-
-# Load configurations from environment variables
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI')  # Provide default
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///Job.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')  # Fetch from environment
-
+app.config['SECRET_KEY'] = 'your_secret_key'  # Change to a secure key
+app.config['JWT_SECRET_KEY'] = 'your_secret_key'  # Secret key for JWT
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=37)  # Set expiration to 2 hours
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)  # Set refresh token expiry to 7 days
 
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -37,11 +41,12 @@ class BaseRoute(Resource):
         return jsonify({
             "message": "Welcome to the Job Management API! Below are the available routes:",
             "routes": {
+                "/register": "Adding users",
+                "/login": "Login route for user authentication.",
                 "/get_jobs": "Retrieve all jobs.",
                 "/get_job": "Retrieve a job by ID or job name (e.g., /get_job?job_id=1 or /get_job?job_name=Software Developer).",
                 "/get_users": "Retrieve all users.",
                 "/get_user": "Retrieve a user by ID, username, or role (e.g., /get_user?user_id=1, /get_user?username=john_doe, or /get_user?role=admin).",
-                "/add_user": "Add a new user.", #removed
                 "/update_user/<int:user_id>": "Update a user by ID.",
                 "/delete_user/<int:user_id>": "Delete a user by ID.",
                 "/get_payments": "Retrieve all payments.",
@@ -57,12 +62,7 @@ class BaseRoute(Resource):
                 "/add_application": "Add a new job application.",
                 "/login": "Login route for user authentication.",
                 "/protected": "A protected resource that requires a JWT token to access.",
-                "/admin/users": "Admin route to manage users.",
-                "/admin/applications": "Admin route to view all applications.",
-                "/admin/payments": "Admin route to view all payments.",
                 "/add_job_resource": "Admin route to add new job resources.",
-                "/update_job_resource/<int:resource_id>": "Admin route to update job resources.",
-                "/delete_job_resource/<int:resource_id>": "Admin route to delete job resources."
             }
         })
 
@@ -80,16 +80,21 @@ class BaseRoute(Resource):
 
 # Job Routes
 class GetJobs(Resource):
+    @role_required('admin')
+    @jwt_required()
     def get(self):
         jobs = Job.query.all()  # Retrieve all jobs
         jobs_list = []
         for job in jobs:
+            print(job)
             job_data = job.to_dict()  # Get the full job dict
+            print(job_data)
             job_data.pop('applications', None)  # Remove applications field if present
             job_data.pop('extra_resources', None)  # Remove extra_resources field if present
             jobs_list.append(job_data)
-        return jobs_list  # Return the filtered list of jobs
-
+        return (jobs_list)  # Return the filtered list of jobs
+    
+api.add_resource(GetJobs, '/get_jobs')
 
 class GetJob(Resource):
     def get(self):
@@ -170,35 +175,57 @@ class GetUser(Resource):
 
 
 class UpdateUser(Resource):
-    def put(self, user_id):
+    def patch(self, user_id):
         user = User.query.get_or_404(user_id)
         data = request.get_json()
+
         try:
-            user.username = data.get('username', user.username)
-            user.email = data.get('email', user.email)
-            user.phone = data.get('phone', user.phone)
-            user.password_hash = data.get('password_hash', user.password_hash)
-            user.role = data.get('role', user.role)
+            # Update user attributes if provided
+            if 'username' in data:
+                user.username = data['username']
+            if 'email' in data:
+                user.email = data['email']
+            if 'phone' in data:
+                user.phone = data['phone']
+            
+            # Handle password update if provided
+            if 'password_hash' in data:
+                user.password_hash = generate_password_hash(data['password_hash'])
+            
+            if 'role' in data:
+                user.role = data['role']
 
-            # Update related applications
-            applications = JobApplication.query.filter_by(user_id=user.id).all()
-            for app in applications:
-                app.user.username = user.username
-                app.user.email = user.email
-                app.user.phone = user.phone
-                db.session.commit()
+            # Update related applications (if applicable)
+            if 'applications' in data:
+                for app_data in data['applications']:
+                    app = JobApplication.query.get(app_data['id'])
+                    if app:
+                        if 'position' in app_data:
+                            app.position = app_data['position']
+                        if 'status' in app_data:
+                            app.status = app_data['status']
+                        # You can add any other application-specific fields here
+                    db.session.commit()
 
-            # Update related payments
-            payments = Payment.query.filter_by(user_id=user.id).all()
-            for payment in payments:
-                payment.user.username = user.username
-                payment.user.email = user.email
-                payment.user.phone = user.phone
-                db.session.commit()
+            # Update related payments (if applicable)
+            if 'payments' in data:
+                for payment_data in data['payments']:
+                    payment = Payment.query.get(payment_data['id'])
+                    if payment:
+                        if 'amount' in payment_data:
+                            payment.amount = payment_data['amount']
+                        if 'status' in payment_data:
+                            payment.status = payment_data['status']
+                        # You can add any other payment-specific fields here
+                    db.session.commit()
 
+            # Commit the changes to the user record
             db.session.commit()
+
             return jsonify(user.to_dict())
+        
         except Exception as e:
+            db.session.rollback()  # Rollback any changes in case of an error
             return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
@@ -246,7 +273,7 @@ class GetPayment(Resource):
                 return jsonify(payment.to_dict())
             else:
                 # Return error as plain text
-                return jsonify({"error": "Payment not found with the provided ID."}), 404
+                return {"error": "Payment not found with the provided ID."}, 404
 
         # Check for username
         elif username:
@@ -257,17 +284,17 @@ class GetPayment(Resource):
                     return jsonify([payment.to_dict() for payment in payments])
                 else:
                     # Return error as plain text
-                    return jsonify({"error": "No payments found for the provided username."}), 404
+                    return {"error": "No payments found for the provided username."}, 404
                     #return Response("No payments found for the provided username.", status=404, mimetype='text/plain')
             else:
                 # Return error as plain text
-                return jsonify({"error": "User with the provided username does not exist."}), 404
+                return {"error": "User with the provided username does not exist."}, 404
                 #return Response("User with the provided username does not exist.", status=404, mimetype='text/plain')
 
         # If neither payment_id nor username is provided
         else:
             # Return error as plain text
-            return jsonify({"error": "Payment not found with the provided ID."}), 400
+            return {"error": "Payment not found with the provided ID."}, 400
             #return Response("Either 'payment_id' or 'username' must be provided.", status=400, mimetype='text/plain')
 
 
@@ -275,11 +302,14 @@ class AddPayment(Resource):
     def post(self):
         data = request.get_json()
         try:
+            # If payment_date is not provided, use the current date and time
+            payment_date = data.get('payment_date', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
             payment = Payment(
                 user_id=data['user_id'],
                 amount=5000.0,
                 payment_status=data.get('payment_status', 'completed'),
-                payment_date=datetime.datetime.strptime(data['payment_date'], '%Y-%m-%d %H:%M:%S')
+                payment_date=datetime.strptime(payment_date, '%Y-%m-%d %H:%M:%S')  # Parse the date correctly
             )
             db.session.add(payment)
             db.session.commit()
@@ -292,7 +322,7 @@ class AddPayment(Resource):
             return payment.to_dict(), 201
         except Exception as e:
             return {"error": str(e)}, 400
-
+                    
 # Extra Resource Routes
 class GetResources(Resource):
     def get(self):
@@ -313,7 +343,7 @@ class GetResource(Resource):
                 return jsonify(resource.to_dict())  # No iteration needed for a single object
             else:
                 # Return error as plain text
-                return jsonify({"error": "Resource not found with the provided ID."}), 404
+                return {"error": "Resource not found with the provided ID."}, 404
                 #return Response("Resource not found with the provided ID.", status=404, mimetype='text/plain')
 
         # Handle job_name
@@ -325,7 +355,7 @@ class GetResource(Resource):
                     return jsonify([resource.to_dict() for resource in resources])
                 else:
                     # Return error as plain text
-                    return jsonify({"error": "No resources found for this job."}), 404
+                    return {"error": "No resources found for this job."}, 404
                     #return Response("No resources found for this job.", status=404, mimetype='text/plain')
 
         # Handle resource_type
@@ -335,13 +365,13 @@ class GetResource(Resource):
                 return jsonify([resource.to_dict() for resource in resources])
             else:
                 # Return error as plain text
-                return jsonify({"error": "No resources found for this type."}), 404
+                return {"error": "No resources found for this type."}, 404
                 #return Response("No resources found for this type.", status=404, mimetype='text/plain')
 
         # If neither resource_id, job_name, nor resource_type is provided
         else:
             # Return error as plain text
-            return jsonify({"error": "Provide either 'resource_id', 'job_name', or 'resource_type'."}), 400
+            return {"error": "Provide either 'resource_id', 'job_name', or 'resource_type'."}, 400
             #return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
 
 class AddResource(Resource):
@@ -525,10 +555,10 @@ class GetApplication(Resource):
                     if applications:
                         return jsonify([application.to_dict() for application in applications])
                     else:
-                        return jsonify({"error": f"No applications found for user '{username}'."}), 404
+                        return {"error": f"No applications found for user '{username}'."}, 404
                         #return Response(f"No applications found for user '{username}'.", status=404, mimetype='text/plain')
                 else:
-                    return jsonify({"error": f"User with username '{username}' does not exist."}), 404
+                    return {"error": f"User with username '{username}' does not exist."}, 404
                     #return Response(f"User with username '{username}' does not exist.", status=404, mimetype='text/plain')
 
             # Handle job_name search
@@ -539,42 +569,46 @@ class GetApplication(Resource):
                     if applications:
                         return jsonify([application.to_dict() for application in applications])
                     else:
-                        return jsonify({"error": f"No applications found for job '{job_name}'."}), 404
+                        return {"error": f"No applications found for job '{job_name}'."}, 404
                         #return Response(f"No applications found for job '{job_name}'.", status=404, mimetype='text/plain')
 
             # If none of the parameters are provided
             else:
-                return jsonify({"error": "Please provide either 'application_id', 'username', or 'job_name'."}), 400
+                return {"error": "Please provide either 'application_id', 'username', or 'job_name'."}, 400
                 #return Response("Please provide either 'application_id', 'username', or 'job_name'.", status=400, mimetype='text/plain')
 
         except Exception as e:
             # Return a plain text error message
-            return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+            return {"error": f"An error occurred: {str(e)}"}, 500
             #return Response(f"An error occurred: {str(e)}", status=500, mimetype='text/plain')
 
 
 
-
-                       
 class AddApplication(Resource):
     def post(self):
         data = request.get_json()
 
         try:
+            # Automatically set status to "pending"
+            # Automatically set date_applied to the current date and time
             application = JobApplication(
                 user_id=data['user_id'],
                 job_id=data['job_id'],
-                status=data.get('status', 'pending'),
-                cover_letter=data.get('cover_letter', ''),
-                date_applied=datetime.datetime.strptime(data['date_applied'], '%Y-%m-%d %H:%M:%S')
+                status="pending",  # Automatically set status
+                application_date=datetime.now()  # Automatically set to current date and time
             )
+            
+            # Add the new application to the session and commit
             db.session.add(application)
             db.session.commit()
 
+            # Return the created application as a dictionary with a status code 201
             return application.to_dict(), 201
-        except Exception as e:
-            return jsonify({"error": str(e)}), 400
 
+        except Exception as e:
+            # Return error details with a 500 status code
+            return {"error": str(e)}, 500
+                    
 #authentication routes
 api.add_resource(Register, '/register')
 api.add_resource(Login, '/login')
@@ -584,7 +618,7 @@ api.add_resource(Protected, '/protected')
 api.add_resource(BaseRoute, '/')
 
 
-api.add_resource(GetJobs, '/get_jobs')
+
 api.add_resource(GetJob, '/get_job')  # Changed this route to handle both job ID and job name
 api.add_resource(GetUsers, '/get_users')
 api.add_resource(GetUser, '/get_user')  # Changed this route to handle both user ID and username

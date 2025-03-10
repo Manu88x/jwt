@@ -20,23 +20,22 @@ def role_required(required_role):
             try:
                 current_user_id = int(current_user_id)
             except ValueError:
-                return jsonify({"error": "Invalid user ID format in token."}), 400
+                return {"error": "Invalid user ID format in token."}, 400
 
             # Fetch the user from the database
             user = User.query.get(current_user_id)
             if not user:
-                return jsonify({"error": "User not found."}), 404
+                return {"error": "User not found."}, 404
             
             # Check if the user has the required role
             if user.role != required_role:
-                return jsonify({"error": f"Access denied. Requires {required_role} role."}), 403
+                return {"error": f"Access denied. Requires {required_role} role."}, 403
             
             # If the user has the required role, proceed with the route
             return fn(*args, **kwargs)
         return wrapper
     return decorator
 
-# User Registration Route
 class Register(Resource):
     def post(self):
         data = request.get_json()
@@ -54,13 +53,16 @@ class Register(Resource):
         # Hash the password
         password_hash = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
+        # Automatically assign the role (e.g., 'user' by default)
+        role = 'user'  # Default role for new users
+
         # Create a new user
         new_user = User(
             username=data['username'],
             email=data['email'],
             phone=data.get('phone', ''),  # Optional
             password_hash=password_hash,
-            role='graduate'  # Default role
+            role=role  # Automatically filled role
         )
 
         # Add the user to the database
@@ -74,7 +76,7 @@ class Register(Resource):
             "email": new_user.email,
             "role": new_user.role
         }, 201
-
+    
 # User Login Route
 class Login(Resource):
     def post(self):

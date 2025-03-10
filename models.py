@@ -23,7 +23,7 @@ class User(db.Model, SerializerMixin):
     phone = db.Column(db.String(20), nullable=True)
     password_hash = db.Column(db.String(128), nullable=False)
     role = db.Column(db.String(50), nullable=False, default="graduate")
-    date_joined = db.Column(db.DateTime, default=datetime.utcnow)
+    date_joined = db.Column(db.DateTime, default=datetime.utcnow, nullable=True)
 
     payments = db.relationship('Payment', back_populates='user', lazy=True)
     applications = db.relationship('JobApplication', back_populates='user', lazy=True)
@@ -153,11 +153,11 @@ class JobApplication(db.Model, SerializerMixin):
             #"role": self.user.role,
             #"date_joined": self.user.date_joined.isoformat() if self.user.date_joined else None,
             "user": {
-                "username": self.user.username,
-                "email": self.user.email,
-                "phone": self.user.phone,
-                "role": self.user.role,
-                "date_joined": self.user.date_joined.isoformat() if self.user.date_joined else None
+                "username": self.user.username if self.user else None,
+                "email": self.user.email if self.user else None,  # Handle None case
+                "phone": self.user.phone if self.user else None,  # Handle None case
+                "role": self.user.role if self.user else None,
+                #"date_joined": self.user.date_joined.isoformat() if self.user.date_joined else None
             },
             #"title": self.job.title,
             #"description": self.job.description,
@@ -189,6 +189,7 @@ class JobApplication(db.Model, SerializerMixin):
                 "date_posted": self.job.date_posted.isoformat() if self.job.date_posted else None,
                 "is_active": self.job.is_active
             }
+
         }
         return app_dict
 
