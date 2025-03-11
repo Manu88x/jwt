@@ -128,3 +128,10 @@ class Protected(Resource):
                 "role": user.role
             }
         }, 200
+
+
+
+
+
+
+
