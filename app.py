@@ -1,3 +1,8 @@
+######################
+###############
+##############
+########
+
 from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
@@ -7,13 +12,21 @@ import datetime
 from flask import Response
 import bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from auth_routes import Register, Login, Protected, role_required
+from datetime import datetime 
+from datetime import timedelta
+from flask import request, jsonify
+from werkzeug.security import generate_password_hash
+
 
 app = Flask(__name__)
 cors = CORS(app, origins="*")
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///Job.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'your_secret_key'  # Change to a secure key
-app.config['JWT_SECRET_KEY'] = 'jwt_secret_key'  # Secret key for JWT
+app.config['JWT_SECRET_KEY'] = 'your_secret_key'  # Secret key for JWT
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=37)  # Set expiration to 2 hours
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)  # Set refresh token expiry to 7 days
 
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -21,17 +34,19 @@ api = Api(app)
 
 jwt = JWTManager(app)  # Initialize JWT Manager
 
+
 # Base route to show available routes and info
 class BaseRoute(Resource):
     def get(self):
         return jsonify({
             "message": "Welcome to the Job Management API! Below are the available routes:",
             "routes": {
+                "/register": "Adding users",
+                "/login": "Login route for user authentication.",
                 "/get_jobs": "Retrieve all jobs.",
                 "/get_job": "Retrieve a job by ID or job name (e.g., /get_job?job_id=1 or /get_job?job_name=Software Developer).",
                 "/get_users": "Retrieve all users.",
                 "/get_user": "Retrieve a user by ID, username, or role (e.g., /get_user?user_id=1, /get_user?username=john_doe, or /get_user?role=admin).",
-                "/add_user": "Add a new user.",
                 "/update_user/<int:user_id>": "Update a user by ID.",
                 "/delete_user/<int:user_id>": "Delete a user by ID.",
                 "/get_payments": "Retrieve all payments.",
@@ -47,12 +62,7 @@ class BaseRoute(Resource):
                 "/add_application": "Add a new job application.",
                 "/login": "Login route for user authentication.",
                 "/protected": "A protected resource that requires a JWT token to access.",
-                "/admin/users": "Admin route to manage users.",
-                "/admin/applications": "Admin route to view all applications.",
-                "/admin/payments": "Admin route to view all payments.",
                 "/add_job_resource": "Admin route to add new job resources.",
-                "/update_job_resource/<int:resource_id>": "Admin route to update job resources.",
-                "/delete_job_resource/<int:resource_id>": "Admin route to delete job resources."
             }
         })
 
@@ -70,18 +80,23 @@ class BaseRoute(Resource):
 
 # Job Routes
 class GetJobs(Resource):
+    @jwt_required()
     def get(self):
         jobs = Job.query.all()  # Retrieve all jobs
         jobs_list = []
         for job in jobs:
+            print(job)
             job_data = job.to_dict()  # Get the full job dict
+            print(job_data)
             job_data.pop('applications', None)  # Remove applications field if present
             job_data.pop('extra_resources', None)  # Remove extra_resources field if present
             jobs_list.append(job_data)
-        return jsonify(jobs_list)  # Return the filtered list of jobs
-
+        return (jobs_list)  # Return the filtered list of jobs
+    
+api.add_resource(GetJobs, '/get_jobs')
 
 class GetJob(Resource):
+    @jwt_required()
     def get(self):
         job_id = request.args.get('job_id', type=int)
         job_name = request.args.get('job_name', type=str)
@@ -90,26 +105,31 @@ class GetJob(Resource):
             job = Job.query.get(job_id)
             if not job:
                 # Return error as plain text
-                return Response(f"Job with ID {job_id} not found.", status=404, mimetype='text/plain')
+                return jsonify({"error": f"Job with ID {job_id} not found."}), 404
+                #return Response(f"Job with ID {job_id} not found.", status=404, mimetype='text/plain')
         elif job_name:
             job = Job.query.filter_by(title=job_name).first()
             if not job:
                 # Return error as plain text
-                return Response(f"Job with name '{job_name}' not found.", status=404, mimetype='text/plain')
+                return {"error": f"Job with name '{job_name}' not found."}, 404
+                #return Response(f"Job with name '{job_name}' not found.", status=404, mimetype='text/plain')
         else:
             # Return error as plain text
-            return Response("Either 'job_id' or 'job_name' must be provided.", status=400, mimetype='text/plain')
+            return {"error": "Either 'job_id' or 'job_name' must be provided."}, 400
+            #return Response("Either 'job_id' or 'job_name' must be provided.", status=400, mimetype='text/plain')
 
         # If the job is found, remove unwanted fields and return job data as JSON
         job_data = job.to_dict()  # Get the full job dict
         job_data.pop('applications', None)  # Remove applications field
         job_data.pop('extra_resources', None)  # Remove extra_resources field
-        return jsonify(job_data)  # Return the filtered job dat
+        return job_data  # Return the filtered job dat
 
     
 
 # User Routes
 class GetUsers(Resource):
+    @role_required('admin') # Only admin users can access this route
+    @jwt_required()
     def get(self):
         users = User.query.all()
         users_list = []
@@ -118,9 +138,11 @@ class GetUsers(Resource):
             user_data.pop('applications', None)
             user_data.pop('payments', None)
             users_list.append(user_data)
-        return jsonify(users_list)
+        return users_list
 
 class GetUser(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         user_id = request.args.get('user_id', type=int)
         username = request.args.get('username', type=str)
@@ -130,109 +152,98 @@ class GetUser(Resource):
             user = User.query.get(user_id)
             if not user:
                 # Return error as plain text
-                return Response(f"User with ID {user_id} not found.", status=404, mimetype='text/plain')
+                return {"error": f"User with ID {user_id} not found."}, 404
+                #return Response(f"User with ID {user_id} not found.", status=404, mimetype='text/plain')
         elif username:
             user = User.query.filter_by(username=username).first()
             if not user:
                 # Return error as plain text
-                return Response(f"User with username '{username}' not found.", status=404, mimetype='text/plain')
+                return {"error": f"User with username '{username}' not found."}, 404
+                #return Response(f"User with username '{username}' not found.", status=404, mimetype='text/plain')
         elif role:
             user = User.query.filter_by(role=role).first()
             if not user:
                 # Return error as plain text
-                return Response(f"No users found with role '{role}'.", status=404, mimetype='text/plain')
+                return {"error": f"No users found with role '{role}'."}, 404
+                #return Response(f"No users found with role '{role}'.", status=404, mimetype='text/plain')
         else:
             # Return error as plain text
-            return Response("Either 'user_id', 'username', or 'role' must be provided.", status=400, mimetype='text/plain')
+            return {"error": "Either 'user_id', 'username', or 'role' must be provided."}, 400
+            #return Response("Either 'user_id', 'username', or 'role' must be provided.", status=400, mimetype='text/plain')
 
         # If the user is found, remove unwanted fields and return user data as JSON
         user_data = user.to_dict()
         user_data.pop('applications', None)
         user_data.pop('payments', None)
-        return jsonify(user_data)  # Return the filtered user data as JSON
-
-    
-class AddUser(Resource):
-    def post(self):
-        data = request.get_json()
-
-        try:
-            # Ensure username, email, and password are provided
-            if not data.get('username') or not data.get('email') or not data.get('password'):
-                return jsonify({"error": "Username, email, and password are required."}), 400
-
-            # Set the role to 'user' by default
-            role = 'user'
-
-            # Hash the password before storing it
-            password_hash = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt())
-
-            # Create the user object
-            user = User(
-                username=data['username'],
-                email=data['email'],
-                phone=data.get('phone'),  # Optional
-                password_hash=password_hash,
-                role=role  # Set the role to 'user' by default
-            )
-
-            # Add the user to the database
-            db.session.add(user)
-            db.session.commit()
-
-            # Respond with the created user (excluding password hash)
-            return jsonify({
-                'message': 'User created successfully!',
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'phone': user.phone,
-                'role': user.role
-            }), 201
-
-        except Exception as e:
-            return jsonify({"error": f"An error occurred: {str(e)}"}), 400
+        return user_data # Return the filtered user data as JSON
 
 
 class UpdateUser(Resource):
-    def put(self, user_id):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
+    def patch(self, user_id):
         user = User.query.get_or_404(user_id)
         data = request.get_json()
+
         try:
-            user.username = data.get('username', user.username)
-            user.email = data.get('email', user.email)
-            user.phone = data.get('phone', user.phone)
-            user.password_hash = data.get('password_hash', user.password_hash)
-            user.role = data.get('role', user.role)
+            # Update user attributes if provided
+            if 'username' in data:
+                user.username = data['username']
+            if 'email' in data:
+                user.email = data['email']
+            if 'phone' in data:
+                user.phone = data['phone']
+            
+            # Handle password update if provided
+            if 'password_hash' in data:
+                user.password_hash = generate_password_hash(data['password_hash'])
+            
+            if 'role' in data:
+                user.role = data['role']
 
-            # Update related applications
-            applications = JobApplication.query.filter_by(user_id=user.id).all()
-            for app in applications:
-                app.user.username = user.username
-                app.user.email = user.email
-                app.user.phone = user.phone
-                db.session.commit()
+            # Update related applications (if applicable)
+            if 'applications' in data:
+                for app_data in data['applications']:
+                    app = JobApplication.query.get(app_data['id'])
+                    if app:
+                        if 'position' in app_data:
+                            app.position = app_data['position']
+                        if 'status' in app_data:
+                            app.status = app_data['status']
+                        # You can add any other application-specific fields here
+                    db.session.commit()
 
-            # Update related payments
-            payments = Payment.query.filter_by(user_id=user.id).all()
-            for payment in payments:
-                payment.user.username = user.username
-                payment.user.email = user.email
-                payment.user.phone = user.phone
-                db.session.commit()
+            # Update related payments (if applicable)
+            if 'payments' in data:
+                for payment_data in data['payments']:
+                    payment = Payment.query.get(payment_data['id'])
+                    if payment:
+                        if 'amount' in payment_data:
+                            payment.amount = payment_data['amount']
+                        if 'status' in payment_data:
+                            payment.status = payment_data['status']
+                        # You can add any other payment-specific fields here
+                    db.session.commit()
 
+            # Commit the changes to the user record
             db.session.commit()
+
             return jsonify(user.to_dict())
+        
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
+            db.session.rollback()  # Rollback any changes in case of an error
+            return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def delete(self, user_id):
         user = User.query.get_or_404(user_id)
 
         # Keep job applications and payments but retain user data in them
         applications = JobApplication.query.filter_by(user_id=user.id).all()
         for app in applications:
+            app.user_id = None  # Disconnect the user from the job application
             app.username = user.username
             app.email = user.email
             app.phone = user.phone
@@ -240,6 +251,7 @@ class DeleteUser(Resource):
 
         payments = Payment.query.filter_by(user_id=user.id).all()
         for payment in payments:
+            payment.user_id = None  # Disconnect the user from the payment
             payment.username = user.username
             payment.email = user.email
             payment.phone = user.phone
@@ -249,15 +261,19 @@ class DeleteUser(Resource):
         db.session.delete(user)
         db.session.commit()
 
-        return jsonify({"message": "User deleted but related applications and payments retained."})
-
+        return {"message": "User deleted but related applications and payments retained."}
+    
 # Payment Routes
 class GetPayments(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         payments = Payment.query.all()
         return jsonify([payment.to_dict() for payment in payments])
 
 class GetPayment(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         payment_id = request.args.get('payment_id', type=int)
         username = request.args.get('username', type=str)
@@ -269,7 +285,7 @@ class GetPayment(Resource):
                 return jsonify(payment.to_dict())
             else:
                 # Return error as plain text
-                return Response("Payment not found with the provided ID.", status=404, mimetype='text/plain')
+                return {"error": "Payment not found with the provided ID."}, 404
 
         # Check for username
         elif username:
@@ -280,26 +296,34 @@ class GetPayment(Resource):
                     return jsonify([payment.to_dict() for payment in payments])
                 else:
                     # Return error as plain text
-                    return Response("No payments found for the provided username.", status=404, mimetype='text/plain')
+                    return {"error": "No payments found for the provided username."}, 404
+                    #return Response("No payments found for the provided username.", status=404, mimetype='text/plain')
             else:
                 # Return error as plain text
-                return Response("User with the provided username does not exist.", status=404, mimetype='text/plain')
+                return {"error": "User with the provided username does not exist."}, 404
+                #return Response("User with the provided username does not exist.", status=404, mimetype='text/plain')
 
         # If neither payment_id nor username is provided
         else:
             # Return error as plain text
-            return Response("Either 'payment_id' or 'username' must be provided.", status=400, mimetype='text/plain')
+            return {"error": "Payment not found with the provided ID."}, 400
+            #return Response("Either 'payment_id' or 'username' must be provided.", status=400, mimetype='text/plain')
 
 
 class AddPayment(Resource):
+    @role_required('user')  # Only regular users can access this route
+    @jwt_required()
     def post(self):
         data = request.get_json()
         try:
+            # If payment_date is not provided, use the current date and time
+            payment_date = data.get('payment_date', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
             payment = Payment(
                 user_id=data['user_id'],
                 amount=5000.0,
                 payment_status=data.get('payment_status', 'completed'),
-                payment_date=datetime.datetime.strptime(data['payment_date'], '%Y-%m-%d %H:%M:%S')
+                payment_date=datetime.strptime(payment_date, '%Y-%m-%d %H:%M:%S')  # Parse the date correctly
             )
             db.session.add(payment)
             db.session.commit()
@@ -309,18 +333,22 @@ class AddPayment(Resource):
                 user.role = 'premium'
                 db.session.commit()
 
-            return jsonify(payment.to_dict()), 201
+            return payment.to_dict(), 201
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
-
+            return {"error": str(e)}, 400
+                    
 # Extra Resource Routes
 class GetResources(Resource):
+    @role_required('premium_user')  # Only admin & premium users can access this route
+    @jwt_required()
     def get(self):
         resources = ExtraResource.query.all()
         return jsonify([resource.to_dict() for resource in resources])
 
 
 class GetResource(Resource):
+    @role_required('premium_user')  # Only admin & premium users can access this route
+    @jwt_required()
     def get(self):
         resource_id = request.args.get('resource_id', type=int)
         job_name = request.args.get('job_name', type=str)
@@ -333,7 +361,8 @@ class GetResource(Resource):
                 return jsonify(resource.to_dict())  # No iteration needed for a single object
             else:
                 # Return error as plain text
-                return Response("Resource not found with the provided ID.", status=404, mimetype='text/plain')
+                return {"error": "Resource not found with the provided ID."}, 404
+                #return Response("Resource not found with the provided ID.", status=404, mimetype='text/plain')
 
         # Handle job_name
         elif job_name:
@@ -344,7 +373,8 @@ class GetResource(Resource):
                     return jsonify([resource.to_dict() for resource in resources])
                 else:
                     # Return error as plain text
-                    return Response("No resources found for this job.", status=404, mimetype='text/plain')
+                    return {"error": "No resources found for this job."}, 404
+                    #return Response("No resources found for this job.", status=404, mimetype='text/plain')
 
         # Handle resource_type
         elif resource_type:
@@ -353,40 +383,59 @@ class GetResource(Resource):
                 return jsonify([resource.to_dict() for resource in resources])
             else:
                 # Return error as plain text
-                return Response("No resources found for this type.", status=404, mimetype='text/plain')
+                return {"error": "No resources found for this type."}, 404
+                #return Response("No resources found for this type.", status=404, mimetype='text/plain')
 
         # If neither resource_id, job_name, nor resource_type is provided
         else:
             # Return error as plain text
-            return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
-
+            return {"error": "Provide either 'resource_id', 'job_name', or 'resource_type'."}, 400
+            #return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
 
 class AddResource(Resource):
+    @role_required('admin')  # Only admin can access this route
+    @jwt_required()
     def post(self):
         data = request.get_json()
 
+        # Validate required fields
         if not data.get('job_id') or not data.get('resource_name') or not data.get('resource_type'):
-            return jsonify({"error": "job_id, resource_name, and resource_type are required fields."}), 400
+            return {"error": "job_id, resource_name, and resource_type are required fields."}, 400
 
         try:
+            # Fetch the job or create a new one
             job = Job.query.get(data['job_id'])
             if not job:
+                # Validate application_deadline
+                if 'application_deadline' not in data:
+                    return {"error": "application_deadline is a required field."}, 400
+                
+                # Validate the date format
+                try:
+                    application_deadline = datetime.strptime(data['application_deadline'], "%Y-%m-%d")
+                except ValueError:
+                    return {"error": "Invalid date format for application_deadline. Expected format: YYYY-MM-DD."}, 400
+
+                # Create a new job with default values for optional fields
                 job = Job(
-                    title=data['job_title'],
-                    location=data['job_location'],
-                    salary_min=data['salary_min'],
-                    salary_max=data['salary_max'],
-                    job_type=data['job_type'],
-                    skills_required=data['skills_required'],
-                    benefits=data['benefits'],
-                    application_deadline=data['application_deadline'],
-                    employer=data['employer'],
-                    employer_email=data['employer_email'],
-                    employer_phone=data['employer_phone']
+                    title=data.get('job_title', 'Default Title'),
+                    description=data.get('job_description', ''),
+                    location=data.get('job_location', 'Remote'),
+                    salary_min=data.get('salary_min', 0),
+                    salary_max=data.get('salary_max', 0),
+                    job_type=data.get('job_type', 'Full-time'),
+                    skills_required=data.get('skills_required', ''),
+                    benefits=data.get('benefits', ''),
+                    application_deadline=application_deadline,
+                    employer=data.get('employer', ''),
+                    employer_email=data.get('employer_email', ''),
+                    employer_phone=data.get('employer_phone', '')
                 )
                 db.session.add(job)
                 db.session.commit()
+                print(f"Created new job with ID: {job.id}")
 
+            # Create the resource
             resource = ExtraResource(
                 job_id=job.id,
                 resource_name=data['resource_name'],
@@ -395,57 +444,80 @@ class AddResource(Resource):
             )
             db.session.add(resource)
             db.session.commit()
+            print(f"Created new resource with ID: {resource.id}")
 
-            return jsonify(resource.to_dict()), 201
+            return resource.to_dict(), 201
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
-
+            # Log the error and rollback the session
+            db.session.rollback()
+            print(f"Error: {str(e)}")  # This will help with debugging
+            return {"error": str(e)}, 400
+        
 class UpdateResource(Resource):
-    def put(self, resource_id):
+    @role_required('admin')  # Only admin can access this route
+    @jwt_required()
+    def patch(self, resource_id):
+        # Fetch the ExtraResource by resource_id
         resource = ExtraResource.query.get_or_404(resource_id)
         data = request.get_json()
 
         try:
-            resource.job_id = data.get('job_id', resource.job_id)
-            resource.resource_name = data.get('resource_name', resource.resource_name)
-            resource.description = data.get('description', resource.description)
-            resource.resource_type = data.get('resource_type', resource.resource_type)
+            # Partial update: Update only the fields that are provided in the request
+            if 'resource_name' in data:
+                resource.resource_name = data['resource_name']
+            if 'description' in data:
+                resource.description = data['description']
+            if 'resource_type' in data:
+                resource.resource_type = data['resource_type']
 
+            # If job_id is provided, update the associated job details
             if 'job_id' in data:
                 job = Job.query.get(data['job_id'])
-                if job:
-                    job.title = data.get('job_title', job.title)
-                    job.location = data.get('job_location', job.location)
-                    job.salary_min = data.get('salary_min', job.salary_min)
-                    job.salary_max = data.get('salary_max', job.salary_max)
-                    job.job_type = data.get('job_type', job.job_type)
-                    job.skills_required = data.get('skills_required', job.skills_required)
-                    job.benefits = data.get('benefits', job.benefits)
-                    job.application_deadline = data.get('application_deadline', job.application_deadline)
-                    job.employer = data.get('employer', job.employer)
-                    job.employer_email = data.get('employer_email', job.employer_email)
-                    job.employer_phone = data.get('employer_phone', job.employer_phone)
+                if not job:
+                    return {"error": "Job not found"}, 404  # Return error if job doesn't exist
 
-                    db.session.commit()
+                # Update job details if provided in the request
+                if 'job_title' in data:
+                    job.title = data['job_title']
+                if 'job_location' in data:
+                    job.location = data['job_location']
+                if 'salary_min' in data:
+                    job.salary_min = data['salary_min']
+                if 'salary_max' in data:
+                    job.salary_max = data['salary_max']
+                if 'job_type' in data:
+                    job.job_type = data['job_type']
+                if 'skills_required' in data:
+                    job.skills_required = data['skills_required']
+                if 'benefits' in data:
+                    job.benefits = data['benefits']
+                if 'application_deadline' in data:
+                    try:
+                        # Ensure the application_deadline is correctly formatted as datetime
+                        application_deadline = datetime.strptime(data['application_deadline'], "%Y-%m-%d")
+                        job.application_deadline = application_deadline
+                    except ValueError:
+                        return {"error": "Invalid date format for application_deadline. Expected format: YYYY-MM-DD."}, 400
+                if 'employer' in data:
+                    job.employer = data['employer']
+                if 'employer_email' in data:
+                    job.employer_email = data['employer_email']
+                if 'employer_phone' in data:
+                    job.employer_phone = data['employer_phone']
 
-                    applications = JobApplication.query.filter_by(job_id=job.id).all()
-                    for app in applications:
-                        app.job.title = job.title
-                        app.job.location = job.location
-                        app.job.salary_min = job.salary_min
-                        app.job.salary_max = job.salary_max
-                        app.job.job_type = job.job_type
-                        app.job.skills_required = job.skills_required
-                        app.job.benefits = job.benefits
-                        app.job.application_deadline = job.application_deadline
-                        db.session.commit()
+                db.session.commit()  # Commit changes to the job
 
-            db.session.commit()
-            return jsonify(resource.to_dict())
+            db.session.commit()  # Commit changes to the resource
+            return resource.to_dict()  # Return updated resource as a dictionary
+
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
-
+            db.session.rollback()  # Rollback if an error occurs
+            print(f"Error updating resource: {str(e)}")  # For debugging purposes
+            return {"error": str(e)}, 400
+                
 class DeleteResource(Resource):
+    @role_required('admin')  # Only admin can access this route
+    @jwt_required()
     def delete(self, resource_id):
         resource = ExtraResource.query.get_or_404(resource_id)
         job = Job.query.get_or_404(resource.job_id)
@@ -474,16 +546,20 @@ class DeleteResource(Resource):
         db.session.delete(resource)
         db.session.commit()
 
-        return jsonify({"message": "Resource deleted, but job information retained in applications."})        
+        return {"message": "Resource deleted, but job information retained in applications."}        
 
 # Job Application Routes
 class GetApplications(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         applications = JobApplication.query.all()
         return jsonify([application.to_dict() for application in applications])
 
 
 class GetApplication(Resource):
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def get(self):
         try:
             application_id = request.args.get('application_id', type=int)
@@ -496,7 +572,8 @@ class GetApplication(Resource):
                 if application:
                     return jsonify(application.to_dict())  # Return application as JSON
                 else:
-                    return Response(f"Application not found with ID {application_id}.", status=404, mimetype='text/plain')
+                    return jsonify({"error": f"Application not found with ID {application_id}."}), 404
+                    #return Response(f"Application not found with ID {application_id}.", status=404, mimetype='text/plain')
 
             # Handle username search
             elif username:
@@ -506,9 +583,11 @@ class GetApplication(Resource):
                     if applications:
                         return jsonify([application.to_dict() for application in applications])
                     else:
-                        return Response(f"No applications found for user '{username}'.", status=404, mimetype='text/plain')
+                        return {"error": f"No applications found for user '{username}'."}, 404
+                        #return Response(f"No applications found for user '{username}'.", status=404, mimetype='text/plain')
                 else:
-                    return Response(f"User with username '{username}' does not exist.", status=404, mimetype='text/plain')
+                    return {"error": f"User with username '{username}' does not exist."}, 404
+                    #return Response(f"User with username '{username}' does not exist.", status=404, mimetype='text/plain')
 
             # Handle job_name search
             elif job_name:
@@ -518,48 +597,83 @@ class GetApplication(Resource):
                     if applications:
                         return jsonify([application.to_dict() for application in applications])
                     else:
-                        return Response(f"No applications found for job '{job_name}'.", status=404, mimetype='text/plain')
+                        return {"error": f"No applications found for job '{job_name}'."}, 404
+                        #return Response(f"No applications found for job '{job_name}'.", status=404, mimetype='text/plain')
 
             # If none of the parameters are provided
             else:
-                return Response("Please provide either 'application_id', 'username', or 'job_name'.", status=400, mimetype='text/plain')
+                return {"error": "Please provide either 'application_id', 'username', or 'job_name'."}, 400
+                #return Response("Please provide either 'application_id', 'username', or 'job_name'.", status=400, mimetype='text/plain')
 
         except Exception as e:
             # Return a plain text error message
-            return Response(f"An error occurred: {str(e)}", status=500, mimetype='text/plain')
+            return {"error": f"An error occurred: {str(e)}"}, 500
+            #return Response(f"An error occurred: {str(e)}", status=500, mimetype='text/plain')
 
 
 
-
-                       
 class AddApplication(Resource):
+    @jwt_required()
     def post(self):
         data = request.get_json()
 
+        # Automatically get user_id from the JWT token payload
+        user_id = get_jwt_identity()  # Assumes the JWT token has user_id in it
+
+        # Automatically set job_id based on your logic
+        # Example: Fetch the first available job or some logic to select job_id
+        job_id = data.get('job_id')  # If the job_id is passed in the payload, use it
+        if not job_id:
+            # Example: Get the first available job from the database
+            job = Job.query.filter_by(status='open').first()  # Modify this query as needed
+            if job:
+                job_id = job.id
+            else:
+                return {"error": "No open jobs available"}, 404
+
         try:
+            # Automatically set status to "pending"
+            # Automatically set date_applied to the current date and time
             application = JobApplication(
-                user_id=data['user_id'],
-                job_id=data['job_id'],
-                status=data.get('status', 'pending'),
-                cover_letter=data.get('cover_letter', ''),
-                date_applied=datetime.datetime.strptime(data['date_applied'], '%Y-%m-%d %H:%M:%S')
+                user_id=user_id,  # Use the user_id fetched from JWT
+                job_id=job_id,    # Use the job_id fetched from logic
+                status="pending",  # Automatically set status
+                application_date=datetime.now()  # Automatically set to current date and time
             )
+            
+            # Add the new application to the session and commit
             db.session.add(application)
             db.session.commit()
 
-            return jsonify(application.to_dict()), 201
+            # Return the created application as a dictionary with a status code 201
+            return application.to_dict(), 201
+
+        except SQLAlchemyError as e:
+            # Handle database-related errors
+            db.session.rollback()  # Rollback any changes in case of error
+            return {"error": "Database error: " + str(e)}, 500
+
+        except KeyError as e:
+            # Handle missing key error
+            return {"error": f"Missing key: {str(e)}"}, 400
+
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
+            # General error handling
+            return {"error": str(e)}, 500
+                    
+#authentication routes
+api.add_resource(Register, '/register')
+api.add_resource(Login, '/login')
+api.add_resource(Protected, '/protected')
 
 # Add resources to API with specific HTTP methods and unique routes
 api.add_resource(BaseRoute, '/')
 
 
-api.add_resource(GetJobs, '/get_jobs')
+
 api.add_resource(GetJob, '/get_job')  # Changed this route to handle both job ID and job name
 api.add_resource(GetUsers, '/get_users')
 api.add_resource(GetUser, '/get_user')  # Changed this route to handle both user ID and username
-api.add_resource(AddUser, '/add_user')
 api.add_resource(UpdateUser, '/update_user/<int:user_id>')
 api.add_resource(DeleteUser, '/delete_user/<int:user_id>')
 

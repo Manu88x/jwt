@@ -3,6 +3,9 @@ from models import User, Job, JobApplication, Payment, ExtraResource
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 import random
+from flask_bcrypt import Bcrypt
+
+bcrypt = Bcrypt()
 
 # Helper function to create random phone numbers in Kenyan format
 def create_random_phone():
@@ -15,7 +18,7 @@ def seed_users():
             username="john_doe92",
             email="johndoe92@gmail.com",  # Updated structure for graduate role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("password123"),
+            password_hash=bcrypt.generate_password_hash("password123").decode('utf-8'),
             role="user",  # non-premium graduate
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
@@ -23,7 +26,7 @@ def seed_users():
             username="jane_smith87",
             email="janesmith87@gmail.com",  # Updated structure for premium_graduate role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("securepass456"),
+            password_hash=bcrypt.generate_password_hash("securepass456").decode('utf-8'),
             role="premium_user",  # premium graduate
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
@@ -31,7 +34,7 @@ def seed_users():
             username="peter_williams",
             email="peterwilliams@gmail.com",  # Updated structure for graduate role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("mypassword789"),
+            password_hash=bcrypt.generate_password_hash("mypassword789").decode('utf-8'),
             role="user",  # non-premium graduate
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
@@ -39,7 +42,7 @@ def seed_users():
             username="mary_kenya",
             email="marykenya@gmail.com",  # Updated structure for admin role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("adminpass321"),
+            password_hash=bcrypt.generate_password_hash("adminpass321").decode('utf-8'),
             role="admin",  # admin role
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
@@ -47,7 +50,7 @@ def seed_users():
             username="joseph_ngugi",
             email="josephngugi@gmail.com",  # Updated structure for premium_graduate role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("joseph2023"),
+            password_hash=bcrypt.generate_password_hash("joseph2023").decode('utf-8'),
             role="premium_user",  # premium graduate
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
@@ -55,7 +58,7 @@ def seed_users():
             username="anne_achola",
             email="anneacholae@gmail.com",  # Updated structure for graduate role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("securepassword"),
+            password_hash=bcrypt.generate_password_hash("securepassword").decode('utf-8'),
             role="user",  # non-premium graduate
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
@@ -63,7 +66,7 @@ def seed_users():
             username="peter_mwangi",
             email="petermwangi@gmail.com",  # Updated structure for premium_graduate role
             phone=create_random_phone(),
-            password_hash=generate_password_hash("securepass789"),
+            password_hash=bcrypt.generate_password_hash("securepass789").decode('utf-8'),
             role="premium_user",  # premium graduate
             date_joined=datetime.utcnow() - timedelta(days=random.randint(30, 365))
         ),
