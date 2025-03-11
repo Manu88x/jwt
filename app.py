@@ -80,7 +80,7 @@ class BaseRoute(Resource):
 
 # Job Routes
 class GetJobs(Resource):
-    #@jwt_required()
+    @jwt_required()
     def get(self):
         jobs = Job.query.all()  # Retrieve all jobs
         jobs_list = []
@@ -96,7 +96,7 @@ class GetJobs(Resource):
 api.add_resource(GetJobs, '/get_jobs')
 
 class GetJob(Resource):
-    #@jwt_required()
+    @jwt_required()
     def get(self):
         job_id = request.args.get('job_id', type=int)
         job_name = request.args.get('job_name', type=str)
@@ -128,8 +128,8 @@ class GetJob(Resource):
 
 # User Routes
 class GetUsers(Resource):
-    #@role_required('admin') # Only admin users can access this route
-    #@jwt_required()
+    @role_required('admin') # Only admin users can access this route
+    @jwt_required()
     def get(self):
         users = User.query.all()
         users_list = []
@@ -235,8 +235,8 @@ class UpdateUser(Resource):
             return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
-    #@role_required('admin')  # Only admin users can access this route
-    #@jwt_required()
+    @role_required('admin')  # Only admin users can access this route
+    @jwt_required()
     def delete(self, user_id):
         user = User.query.get_or_404(user_id)
 
@@ -617,12 +617,26 @@ class AddApplication(Resource):
     def post(self):
         data = request.get_json()
 
+        # Automatically get user_id from the JWT token payload
+        user_id = get_jwt_identity()  # Assumes the JWT token has user_id in it
+
+        # Automatically set job_id based on your logic
+        # Example: Fetch the first available job or some logic to select job_id
+        job_id = data.get('job_id')  # If the job_id is passed in the payload, use it
+        if not job_id:
+            # Example: Get the first available job from the database
+            job = Job.query.filter_by(status='open').first()  # Modify this query as needed
+            if job:
+                job_id = job.id
+            else:
+                return {"error": "No open jobs available"}, 404
+
         try:
             # Automatically set status to "pending"
             # Automatically set date_applied to the current date and time
             application = JobApplication(
-                user_id=data['user_id'],
-                job_id=data['job_id'],
+                user_id=user_id,  # Use the user_id fetched from JWT
+                job_id=job_id,    # Use the job_id fetched from logic
                 status="pending",  # Automatically set status
                 application_date=datetime.now()  # Automatically set to current date and time
             )
@@ -634,8 +648,17 @@ class AddApplication(Resource):
             # Return the created application as a dictionary with a status code 201
             return application.to_dict(), 201
 
+        except SQLAlchemyError as e:
+            # Handle database-related errors
+            db.session.rollback()  # Rollback any changes in case of error
+            return {"error": "Database error: " + str(e)}, 500
+
+        except KeyError as e:
+            # Handle missing key error
+            return {"error": f"Missing key: {str(e)}"}, 400
+
         except Exception as e:
-            # Return error details with a 500 status code
+            # General error handling
             return {"error": str(e)}, 500
                     
 #authentication routes
