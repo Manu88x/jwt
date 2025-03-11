@@ -80,7 +80,7 @@ class BaseRoute(Resource):
 
 # Job Routes
 class GetJobs(Resource):
-    @jwt_required()
+    #@jwt_required()
     def get(self):
         jobs = Job.query.all()  # Retrieve all jobs
         jobs_list = []
@@ -96,7 +96,7 @@ class GetJobs(Resource):
 api.add_resource(GetJobs, '/get_jobs')
 
 class GetJob(Resource):
-    @jwt_required()
+    #@jwt_required()
     def get(self):
         job_id = request.args.get('job_id', type=int)
         job_name = request.args.get('job_name', type=str)
@@ -128,8 +128,8 @@ class GetJob(Resource):
 
 # User Routes
 class GetUsers(Resource):
-    @role_required('admin') # Only admin users can access this route
-    @jwt_required()
+    #@role_required('admin') # Only admin users can access this route
+    #@jwt_required()
     def get(self):
         users = User.query.all()
         users_list = []
@@ -235,8 +235,8 @@ class UpdateUser(Resource):
             return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
-    @role_required('admin')  # Only admin users can access this route
-    @jwt_required()
+    #@role_required('admin')  # Only admin users can access this route
+    #@jwt_required()
     def delete(self, user_id):
         user = User.query.get_or_404(user_id)
 
