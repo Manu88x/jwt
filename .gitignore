@@ -2,18 +2,16 @@
 # Python-related files
 *.pyc
 *.pyo
-*.pyd
+*.pydc
 __pycache__/
 *.env
 .env.*
 
 # Flask instance folder
-instance/
 *.cfg
 *.ini
 
 # SQLite database files
-*.db
 *.sqlite3
 
 # Logs and other runtime files
