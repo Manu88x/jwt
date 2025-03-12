@@ -13,10 +13,13 @@ from flask import Response
 import bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from auth_routes import Register, Login, Protected, role_required
-from datetime import datetime 
+#from datetime import datetime 
 from datetime import timedelta
 from flask import request, jsonify
 from werkzeug.security import generate_password_hash
+import base64
+import requests
+from requests.auth import HTTPBasicAuth
 
 
 app = Flask(__name__)
@@ -34,6 +37,21 @@ api = Api(app)
 
 jwt = JWTManager(app)  # Initialize JWT Manager
 
+# M-Pesa credentials (Use environment variables for security in production)
+consumer_key = 'BAWVnD0jcd3WW9FiRuiwGTTrSwxXRjHGNn4XJXqBlzQPzqHQ'
+consumer_secret = 'mc9CMe7k4EK1E0PIvetAgVuaom0shGWwChGxp7EiiNNUBu3PnxXBxxRjGLZQInQK'
+shortcode = "174379"
+passkey = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
+
+# OAuth URL for authentication to get an access token from Safaricom
+api_url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+
+# M-Pesa API endpoint for the B2C payment request (sending money)
+api_endpoint = 'https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest'
+
+# Define the callback URL (for simplicity, we use the same URL for callback)
+callback_url = "https://yourserver.com/api/payment"  # Replace with your actual callback URL
+
 
 # Base route to show available routes and info
 class BaseRoute(Resource):
@@ -44,21 +62,21 @@ class BaseRoute(Resource):
                 "/register": "Adding users",
                 "/login": "Login route for user authentication.",
                 "/get_jobs": "Retrieve all jobs.",
-                "/get_job": "Retrieve a job by ID or job name (e.g., /get_job?job_id=1 or /get_job?job_name=Software Developer).",
+                "/get_job?job_id=1 or /get_job?job_name=Software Developer": "Retrieve a job by ID or job name",
                 "/get_users": "Retrieve all users.",
-                "/get_user": "Retrieve a user by ID, username, or role (e.g., /get_user?user_id=1, /get_user?username=john_doe, or /get_user?role=admin).",
+                "/get_user?user_id=1, /get_user?username=john_doe, or /get_user?role=admin": "Retrieve a user by ID, username, or role",
                 "/update_user/<int:user_id>": "Update a user by ID.",
                 "/delete_user/<int:user_id>": "Delete a user by ID.",
                 "/get_payments": "Retrieve all payments.",
-                "/get_payment": "Retrieve a payment by ID or username (e.g., /get_payment?payment_id=1 or /get_payment?username=john_doe).",
+                "/get_payment?payment_id=1 or /get_payment?username=john_doe": "Retrieve a payment by ID or username.",
                 "/add_payment": "Add a new payment.",
                 "/get_job_resources": "Retrieve all extra resources for a job.",
-                "/get_job_resource": "Retrieve a resource by ID, job name, or resource type (e.g., /get_job_resource?resource_id=1 or /get_job_resource?job_name=Software Engineer or /get_job_resource?resource_type=Document).",
+                "/get_job_resource?resource_id=1 or /get_job_resource?job_name=Software Engineer or /get_job_resource?resource_type=Document": "Retrieve a resource by ID, job name, or resource type",
                 "/add_job_resource": "Add a new extra resource.",
                 "/update_job_resource/<int:resource_id>": "Update a resource by ID.",
                 "/delete_job_resource/<int:resource_id>": "Delete a resource by ID.",
                 "/get_applications": "Retrieve all job applications.",
-                "/get_application": "Retrieve a job application by ID, username, or job name (e.g., /get_application?application_id=1 or /get_application?username=john_doe or /get_application?job_name=Software Engineer).",
+                "/get_application?application_id=1 or /get_application?username=john_doe or /get_application?job_name=Software Engineer": "Retrieve a job application by ID, username, or job name",
                 "/add_application": "Add a new job application.",
                 "/login": "Login route for user authentication.",
                 "/protected": "A protected resource that requires a JWT token to access.",
@@ -128,7 +146,7 @@ class GetJob(Resource):
 
 # User Routes
 class GetUsers(Resource):
-    @role_required('admin') # Only admin users can access this route
+    #@role_required('admin') # Only admin users can access this route
     @jwt_required()
     def get(self):
         users = User.query.all()
@@ -141,7 +159,7 @@ class GetUsers(Resource):
         return users_list
 
 class GetUser(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         user_id = request.args.get('user_id', type=int)
@@ -179,7 +197,7 @@ class GetUser(Resource):
 
 
 class UpdateUser(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def patch(self, user_id):
         user = User.query.get_or_404(user_id)
@@ -235,7 +253,7 @@ class UpdateUser(Resource):
             return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def delete(self, user_id):
         user = User.query.get_or_404(user_id)
@@ -265,14 +283,14 @@ class DeleteUser(Resource):
     
 # Payment Routes
 class GetPayments(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         payments = Payment.query.all()
         return jsonify([payment.to_dict() for payment in payments])
 
 class GetPayment(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         payment_id = request.args.get('payment_id', type=int)
@@ -311,19 +329,14 @@ class GetPayment(Resource):
 
 
 class AddPayment(Resource):
-    @role_required('user')  # Only regular users can access this route
-    @jwt_required()
     def post(self):
         data = request.get_json()
         try:
-            # If payment_date is not provided, use the current date and time
-            payment_date = data.get('payment_date', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-
             payment = Payment(
                 user_id=data['user_id'],
                 amount=5000.0,
                 payment_status=data.get('payment_status', 'completed'),
-                payment_date=datetime.strptime(payment_date, '%Y-%m-%d %H:%M:%S')  # Parse the date correctly
+                payment_date=datetime.datetime.strptime(data['payment_date'], '%Y-%m-%d %H:%M:%S')
             )
             db.session.add(payment)
             db.session.commit()
@@ -336,18 +349,16 @@ class AddPayment(Resource):
             return payment.to_dict(), 201
         except Exception as e:
             return {"error": str(e)}, 400
-                    
-# Extra Resource Routes
+
+
 class GetResources(Resource):
-    @role_required('premium_user')  # Only admin & premium users can access this route
-    @jwt_required()
+    #@role_required('premium_user')
     def get(self):
         resources = ExtraResource.query.all()
         return jsonify([resource.to_dict() for resource in resources])
 
-
 class GetResource(Resource):
-    @role_required('premium_user')  # Only admin & premium users can access this route
+    #@role_required('premium_user')  # Only admin & premium users can access this route
     @jwt_required()
     def get(self):
         resource_id = request.args.get('resource_id', type=int)
@@ -393,7 +404,7 @@ class GetResource(Resource):
             #return Response("Provide either 'resource_id', 'job_name', or 'resource_type'.", status=400, mimetype='text/plain')
 
 class AddResource(Resource):
-    @role_required('admin')  # Only admin can access this route
+    #@role_required('admin')  # Only admin can access this route
     @jwt_required()
     def post(self):
         data = request.get_json()
@@ -454,7 +465,7 @@ class AddResource(Resource):
             return {"error": str(e)}, 400
         
 class UpdateResource(Resource):
-    @role_required('admin')  # Only admin can access this route
+    #@role_required('admin')  # Only admin can access this route
     @jwt_required()
     def patch(self, resource_id):
         # Fetch the ExtraResource by resource_id
@@ -516,7 +527,7 @@ class UpdateResource(Resource):
             return {"error": str(e)}, 400
                 
 class DeleteResource(Resource):
-    @role_required('admin')  # Only admin can access this route
+    #@role_required('admin')  # Only admin can access this route
     @jwt_required()
     def delete(self, resource_id):
         resource = ExtraResource.query.get_or_404(resource_id)
@@ -550,7 +561,7 @@ class DeleteResource(Resource):
 
 # Job Application Routes
 class GetApplications(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         applications = JobApplication.query.all()
@@ -558,7 +569,7 @@ class GetApplications(Resource):
 
 
 class GetApplication(Resource):
-    @role_required('admin')  # Only admin users can access this route
+    #@role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         try:
@@ -692,4 +703,4 @@ api.add_resource(GetApplication, '/get_application')  # Changed this route to ha
 api.add_resource(AddApplication, '/add_application')
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=6000)
