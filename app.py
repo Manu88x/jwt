@@ -13,7 +13,7 @@ from flask import Response
 import bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from auth_routes import Register, Login, Protected, role_required
-#from datetime import datetime 
+from datetime import datetime 
 from datetime import timedelta
 from flask import request, jsonify
 from werkzeug.security import generate_password_hash
@@ -146,7 +146,7 @@ class GetJob(Resource):
 
 # User Routes
 class GetUsers(Resource):
-    #@role_required('admin') # Only admin users can access this route
+    @role_required('admin') # Only admin users can access this route
     @jwt_required()
     def get(self):
         users = User.query.all()
@@ -159,7 +159,7 @@ class GetUsers(Resource):
         return users_list
 
 class GetUser(Resource):
-    #@role_required('admin')  # Only admin users can access this route
+    @role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         user_id = request.args.get('user_id', type=int)
@@ -197,7 +197,7 @@ class GetUser(Resource):
 
 
 class UpdateUser(Resource):
-    #@role_required('admin')  # Only admin users can access this route
+    @role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def patch(self, user_id):
         user = User.query.get_or_404(user_id)
@@ -253,7 +253,7 @@ class UpdateUser(Resource):
             return {"error": str(e)}, 400
 
 class DeleteUser(Resource):
-    #@role_required('admin')  # Only admin users can access this route
+    @role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def delete(self, user_id):
         user = User.query.get_or_404(user_id)
@@ -283,14 +283,14 @@ class DeleteUser(Resource):
     
 # Payment Routes
 class GetPayments(Resource):
-    #@role_required('admin')  # Only admin users can access this route
+    @role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         payments = Payment.query.all()
         return jsonify([payment.to_dict() for payment in payments])
 
 class GetPayment(Resource):
-    #@role_required('admin')  # Only admin users can access this route
+    @role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         payment_id = request.args.get('payment_id', type=int)
@@ -329,36 +329,39 @@ class GetPayment(Resource):
 
 
 class AddPayment(Resource):
+    @role_required('user')  # Only authenticated users can access this route
+    @jwt_required()  # Ensure the user is authenticated via JWT
     def post(self):
         data = request.get_json()
+
         try:
-            payment = Payment(
-                user_id=data['user_id'],
-                amount=5000.0,
-                payment_status=data.get('payment_status', 'completed'),
-                payment_date=datetime.datetime.strptime(data['payment_date'], '%Y-%m-%d %H:%M:%S')
-            )
-            db.session.add(payment)
-            db.session.commit()
+            # Get user_id from the JWT token
+            user_id = get_jwt_identity()
 
-            user = User.query.get(data['user_id'])
-            if payment.amount == 5000 and payment.payment_status == 'completed':
-                user.role = 'premium'
-                db.session.commit()
-
-            return payment.to_dict(), 201
+            # Validate incoming data (only 'amount' is required, rest will be handled automatically)
+            if 'amount' not in data:
+                return {"error": "Missing required field: 'amount'"}, 400
+            
+            # Dynamically getting payment amount, defaulting to 5000.0
+            amount = data['amount']  # 'amount' is mandatory now
+            payment_status = data.get('payment_status', 'completed')  # Default 'completed' if not provided
+            payment_date = data.get('payment_date', datetime.now())  # Default current date and time
+            
+            # Process payment data here...
+            
+            return {"message": "Payment added successfully."}, 200
+        
         except Exception as e:
-            return {"error": str(e)}, 400
-
-
+            return {"error": f"An unexpected error occurred: {str(e)}"}, 500
+        
 class GetResources(Resource):
-    #@role_required('premium_user')
+    @role_required('premium_user')
     def get(self):
         resources = ExtraResource.query.all()
         return jsonify([resource.to_dict() for resource in resources])
 
 class GetResource(Resource):
-    #@role_required('premium_user')  # Only admin & premium users can access this route
+    @role_required('premium_user')  # Only admin & premium users can access this route
     @jwt_required()
     def get(self):
         resource_id = request.args.get('resource_id', type=int)
@@ -465,7 +468,7 @@ class AddResource(Resource):
             return {"error": str(e)}, 400
         
 class UpdateResource(Resource):
-    #@role_required('admin')  # Only admin can access this route
+    @role_required('admin')  # Only admin can access this route
     @jwt_required()
     def patch(self, resource_id):
         # Fetch the ExtraResource by resource_id
@@ -527,7 +530,7 @@ class UpdateResource(Resource):
             return {"error": str(e)}, 400
                 
 class DeleteResource(Resource):
-    #@role_required('admin')  # Only admin can access this route
+    @role_required('admin')  # Only admin can access this route
     @jwt_required()
     def delete(self, resource_id):
         resource = ExtraResource.query.get_or_404(resource_id)
@@ -569,7 +572,7 @@ class GetApplications(Resource):
 
 
 class GetApplication(Resource):
-    #@role_required('admin')  # Only admin users can access this route
+    @role_required('admin')  # Only admin users can access this route
     @jwt_required()
     def get(self):
         try:
@@ -671,11 +674,171 @@ class AddApplication(Resource):
         except Exception as e:
             # General error handling
             return {"error": str(e)}, 500
+        
+class GetUserProfile(Resource):
+    @jwt_required()  # Ensure that the user is authenticated via JWT token
+    def get(self):
+        # Automatically fetch the current user's ID from the JWT token
+        current_user_id = get_jwt_identity()  # Get the user ID from the JWT token
+
+        # Query the user from the database based on the current user's ID
+        user = User.query.get(current_user_id)
+
+        # If user is not found, return an error
+        if not user:
+            return {"error": "User not found."}, 404
+
+        # Convert user to dictionary
+        user_data = user.to_dict()
+
+        # Optionally, remove fields you don't want to return in the response
+        user_data.pop('applications', None)  # Remove 'applications' field (optional)
+        user_data.pop('payments', None)  # Remove 'payments' field (optional)
+
+        # Remove the password field to ensure it is not returned
+        user_data.pop('password', None)
+
+        # Return the user profile data with a success message
+        return {
+            "message": "User profile retrieved successfully!",
+            "user": user_data
+        }, 200
+
+
+# Update Profile
+class UpdateUserProfile(Resource):
+    @jwt_required()  # Ensure the user is authenticated
+    def patch(self):
+        current_user_id = get_jwt_identity()  # Get the current user's ID from the JWT token
+
+        # Query the user from the database
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return {"error": "User not found."}, 404
+
+        data = request.get_json()  # Get the data from the request body
+
+        if 'username' in data:
+            # Ensure the new username is not already taken
+            if User.query.filter_by(username=data['username']).first():
+                return {"error": "Username is already in use."}, 400
+            user.username = data['username']
+
+        # Update user attributes if they are provided, but do not allow role change
+        if 'email' in data:
+            # Ensure the new email is not already taken
+            if User.query.filter_by(email=data['email']).first():
+                return {"error": "Email is already in use."}, 400
+            user.email = data['email']
+        if 'phone' in data:
+            user.phone = data['phone']
+        if 'password' in data:
+            # Hash the new password before saving it
+            password_hash = bcrypt.hashpw(data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            user.password_hash = password_hash
+
+        # Commit changes to the database
+        db.session.commit()
+
+        # Return the updated user profile without the password
+        return {
+            "message": "User profile updated successfully!",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "phone": user.phone,
+                "role": user.role,  # Do not allow updating the role
+            }
+        }, 200
+
+
+# Delete Profile
+class DeleteUserProfile(Resource):
+    @jwt_required()  # Ensure the user is authenticated
+    def delete(self):
+        current_user_id = get_jwt_identity()  # Get the current user's ID from the JWT token
+
+        # Query the user from the database
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return {"error": "User not found."}, 404
+
+        # Delete the user from the database
+        db.session.delete(user)
+        db.session.commit()
+
+        return {
+            "message": "User profile deleted successfully!"
+        }, 200
+    
+# Get User's Own Application (Return only Job Info)
+class GetUserApplication(Resource):
+    @jwt_required()  # Ensure the user is authenticated
+    def get(self):
+        current_user_id = get_jwt_identity()  # Get the current user's ID from the JWT token
+        
+        # Retrieve the user's application based on their user_id
+        application = JobApplication.query.filter_by(user_id=current_user_id).first()
+
+        if not application:
+            return {"error": "Application not found."}, 404
+        
+        # Get the associated job details
+        job = Job.query.get(application.job_id)
+
+        if not job:
+            return {"error": "Job not found."}, 404
+
+        return {
+            "job": job.to_dict()  # Return only job details
+        }
+
+
+# Delete User's Own Application (No actual database changes, just simulation)
+class DeleteUserApplication(Resource):
+    @jwt_required()  # Ensure the user is authenticated
+    def delete(self):
+        current_user_id = get_jwt_identity()  # Get the current user's ID from the JWT token
+        
+        # Retrieve the user's application based on their user_id
+        application = JobApplication.query.filter_by(user_id=current_user_id).first()
+
+        if not application:
+            return {"error": "Application not found."}, 404
+
+        # Get the job associated with the application to return job info
+        job = Job.query.get(application.job_id)
+
+        if not job:
+            return {"error": "Job not found."}, 404
+
+        # Instead of deleting the application, we simulate the deletion
+        # No database changes are made here
+        return {
+            "message": "Application deletion simulated successfully (no changes in database).",
+            "job": job.to_dict()  # Return the job info as requested
+        }
                     
 #authentication routes
 api.add_resource(Register, '/register')
 api.add_resource(Login, '/login')
 api.add_resource(Protected, '/protected')
+
+
+# Get User Profile Route
+api.add_resource(GetUserProfile, '/user/view_profile')
+
+# Update User Profile Route
+api.add_resource(UpdateUserProfile, '/user/update_profile')
+
+# Delete User Profile Route
+api.add_resource(DeleteUserProfile, '/user/delete_profile')
+
+api.add_resource(GetUserApplication, '/user/view_application')  # User can update their own application
+api.add_resource(DeleteUserApplication, '/user/delete_application')  # User can delete their own application
 
 # Add resources to API with specific HTTP methods and unique routes
 api.add_resource(BaseRoute, '/')
@@ -703,4 +866,4 @@ api.add_resource(GetApplication, '/get_application')  # Changed this route to ha
 api.add_resource(AddApplication, '/add_application')
 
 if __name__ == "__main__":
-    app.run(debug=True, port=6000)
+    app.run(debug=True, port=5000)
