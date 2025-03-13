@@ -10,6 +10,8 @@ The **Moringa Pathway Backend** is a web application designed to manage job post
 
 ## How to Use
 
+### In order to be up to date on the progress of this repository, be sure to source your code from the branch named Abdul
+
 ### Requirements
 
 * Python 3.6 or higher installed on your system.
