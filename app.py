@@ -4,6 +4,7 @@
 ########
 
 from flask import Flask, request, jsonify
+from sqlalchemy.exc import SQLAlchemyError
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_cors import CORS
@@ -17,9 +18,9 @@ from datetime import datetime
 from datetime import timedelta
 from flask import request, jsonify
 from werkzeug.security import generate_password_hash
-import base64
-import requests
-from requests.auth import HTTPBasicAuth
+#import base64
+#import requests
+#from requests.auth import HTTPBasicAuth
 
 
 app = Flask(__name__)
@@ -38,19 +39,19 @@ api = Api(app)
 jwt = JWTManager(app)  # Initialize JWT Manager
 
 # M-Pesa credentials (Use environment variables for security in production)
-consumer_key = 'BAWVnD0jcd3WW9FiRuiwGTTrSwxXRjHGNn4XJXqBlzQPzqHQ'
-consumer_secret = 'mc9CMe7k4EK1E0PIvetAgVuaom0shGWwChGxp7EiiNNUBu3PnxXBxxRjGLZQInQK'
-shortcode = "174379"
-passkey = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
+#consumer_key = 'BAWVnD0jcd3WW9FiRuiwGTTrSwxXRjHGNn4XJXqBlzQPzqHQ'
+#consumer_secret = 'mc9CMe7k4EK1E0PIvetAgVuaom0shGWwChGxp7EiiNNUBu3PnxXBxxRjGLZQInQK'
+#shortcode = "174379"
+#passkey = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
 
 # OAuth URL for authentication to get an access token from Safaricom
-api_url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+#api_url = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
 
 # M-Pesa API endpoint for the B2C payment request (sending money)
-api_endpoint = 'https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest'
+#api_endpoint = 'https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest'
 
 # Define the callback URL (for simplicity, we use the same URL for callback)
-callback_url = "https://yourserver.com/api/payment"  # Replace with your actual callback URL
+#callback_url = "https://yourserver.com/api/payment"  # Replace with your actual callback URL
 
 
 # Base route to show available routes and info
