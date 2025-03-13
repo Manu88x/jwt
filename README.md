@@ -30,6 +30,11 @@ The **Moringa Pathway Backend** is a web application designed to manage job post
     Set Up the Backend:
 
     Navigate to the backend directory:
+    Go to Branches then open Abdul branch 
+    Then clone the repo
+    ```bash
+    git@github.com:Manu88x/jwt.git
+    ```
     ```bash
     cd jwt
     ```
@@ -57,7 +62,8 @@ The **Moringa Pathway Backend** is a web application designed to manage job post
 * **Job Applications:** Manage job applications and track their status.
 * **Resource Management:** Add and manage resources for job seekers.
 * **Authentication:** Secure API endpoints using JWT (JSON Web Tokens).
-
+* **RBAC:** Allow access to API endpoints for users with specific roles.
+ 
 ### Technologies Used
 
 * Flask: Backend framework for handling API requests.
@@ -136,7 +142,6 @@ The **Moringa Pathway Backend** is a web application designed to manage job post
 * Implement email notifications for job applications and payments.
 * Add support for file uploads (e.g., resumes).
 * Integrate with a payment gateway like M-Pesa for seamless payments.
-* Implement user roles and permissions for better access control.
 
 ### License
 
